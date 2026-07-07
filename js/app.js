@@ -114,6 +114,11 @@ const PRODUCTOS = {
 
 auth.onAuthStateChanged(async user => {
     if (user) {
+        // Ignorar usuarios de PROESA — no hacer signOut para no afectar la otra sesion
+        if (user.email && !user.email.endsWith('@lans.app')) {
+            showLogin();
+            return;
+        }
         currentUid = user.uid;
         const doc = await db.collection('lans_usuarios').doc(user.uid).get();
         if (doc.exists) {

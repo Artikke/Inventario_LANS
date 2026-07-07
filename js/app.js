@@ -1,4 +1,5 @@
-/* LANS - Sistema de Inventario (GitHub Pages + Firebase) */
+/* LANS - Sistema de Inventario (GitHub Pages + Firebase)
+   Identico a PROESA + rol "almacen" (ve todo, no edita, no ve costos) */
 
 const firebaseConfig = {
     apiKey: "AIzaSyA2TBZwWuebLhxb32BYcxr4DGb1A-iDC84",
@@ -174,6 +175,7 @@ function showApp() {
     document.getElementById('appView').style.display   = '';
     renderNav();
     if (currentUser.rol === 'admin') showAdminPedidos();
+    else if (currentUser.rol === 'lider') showAprobar();
     else if (currentUser.rol === 'almacen') showMovimientos();
     else showNuevoPedido();
 }
@@ -238,9 +240,7 @@ async function setupAdmin() {
 }
 
 async function cargarDatosIniciales() {
-    const batchSize = 500;
-    let batch = db.batch();
-    let count = 0;
+    const batch = db.batch();
 
     for (const [categoria, items] of Object.entries(PRODUCTOS)) {
         for (const item of items) {
@@ -252,16 +252,10 @@ async function cargarDatosIniciales() {
                 costo: item.costo || 0,
                 activo: true
             });
-            count++;
-            if (count >= batchSize) {
-                await batch.commit();
-                batch = db.batch();
-                count = 0;
-            }
         }
     }
 
-    if (count > 0) await batch.commit();
+    await batch.commit();
 }
 
 // ═══════════════════════════════
@@ -273,9 +267,13 @@ function renderNav() {
     const role = currentUser.rol;
     let links = '';
 
+    // Todos pueden pedir material
     links += navLink('showNuevoPedido', 'bi-cart-plus', 'Nuevo Pedido');
     links += navLink('showMisPedidos', 'bi-list-check', 'Mis Pedidos');
 
+    if (role === 'lider') {
+        links += navLink('showAprobar', 'bi-check2-square', 'Aprobar');
+    }
     if (role === 'almacen') {
         links += navLink('showMovimientos', 'bi-eye', 'Movimientos');
     }
@@ -484,15 +482,19 @@ async function submitPedido() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
 
     try {
+        // Admin y lider saltan aprobacion de lider
+        const saltaLider = currentUser.rol === 'admin' || currentUser.rol === 'lider';
         await db.collection('lans_pedidos').add({
             uid: currentUid,
             nombreEmpleado: currentUser.nombre,
             area: currentUser.area,
             rol: currentUser.rol,
             detalles: detalles,
-            estado: 'pendiente',
+            estado: saltaLider ? 'aprobado_lider' : 'pendiente',
             fecha: firebase.firestore.FieldValue.serverTimestamp(),
+            aprobadoPorLider: saltaLider ? currentUid : null,
             aprobadoPorAdmin: null,
+            nombreLider: saltaLider ? currentUser.nombre : null,
             nombreAdmin: null,
             noInventario: null
         });
@@ -576,7 +578,118 @@ async function showMisPedidos() {
 }
 
 // ═══════════════════════════════
-//  VIEW: Movimientos (Almacen - read-only, no costs)
+//  VIEW: Aprobar (Lider)
+// ═══════════════════════════════
+
+async function showAprobar() {
+    setActiveNav('showAprobar');
+    const main = document.getElementById('mainContent');
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+
+    let snap;
+    try {
+        snap = await db.collection('lans_pedidos')
+            .where('area', '==', currentUser.area)
+            .where('estado', '==', 'pendiente')
+            .get();
+    } catch (e) {
+        main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
+        return;
+    }
+
+    if (snap.empty) {
+        main.innerHTML = `<div class="empty-state">
+            <i class="bi bi-check-circle"></i>
+            <h5>Sin pedidos pendientes</h5>
+            <p>No hay pedidos por aprobar en tu area</p></div>`;
+        return;
+    }
+
+    const pedidosAprobar = [];
+    snap.forEach(d => pedidosAprobar.push({ id: d.id, ...d.data() }));
+    pedidosAprobar.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+
+    let cards = '';
+    pedidosAprobar.forEach(p => {
+        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
+        const items = (p.detalles || []).map(i =>
+            `<tr><td>${i.nombre}</td><td class="text-center">${i.unidad}</td><td class="text-center">${i.cantidad}</td></tr>`
+        ).join('');
+
+        cards += `
+            <div class="col-lg-6 mb-3">
+                <div class="card card-lans">
+                    <div class="card-header card-header-lans d-flex justify-content-between">
+                        <span><i class="bi bi-person me-1"></i>${p.nombreEmpleado}</span>
+                        <small>${fecha}</small>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>Producto</th><th class="text-center">UM</th><th class="text-center">Cant.</th></tr></thead>
+                            <tbody>${items}</tbody>
+                        </table>
+                    </div>
+                    <div class="card-footer bg-white d-flex gap-2">
+                        <button class="btn btn-success btn-sm flex-fill" onclick="aprobarPedido('${p.id}','aprobado_lider')">
+                            <i class="bi bi-check-lg me-1"></i>Aprobar
+                        </button>
+                        <button class="btn btn-danger btn-sm flex-fill" onclick="aprobarPedido('${p.id}','rechazado')">
+                            <i class="bi bi-x-lg me-1"></i>Rechazar
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    main.innerHTML = `
+        <h5 class="mb-3"><i class="bi bi-check2-square me-2 text-lans"></i>Pedidos por Aprobar - ${currentUser.area}</h5>
+        <div class="row">${cards}</div>`;
+}
+
+async function aprobarPedido(pedidoId, nuevoEstado) {
+    try {
+        const updates = { estado: nuevoEstado };
+        if (nuevoEstado === 'aprobado_lider') {
+            updates.aprobadoPorLider = currentUid;
+            updates.nombreLider = currentUser.nombre;
+            updates.fechaAprobacionLider = firebase.firestore.FieldValue.serverTimestamp();
+        } else if (nuevoEstado === 'aprobado') {
+            updates.aprobadoPorAdmin = currentUid;
+            updates.nombreAdmin = currentUser.nombre;
+            updates.fechaAprobacionAdmin = firebase.firestore.FieldValue.serverTimestamp();
+        } else if (nuevoEstado === 'rechazado') {
+            if (currentUser.rol === 'lider') {
+                updates.aprobadoPorLider = currentUid;
+                updates.nombreLider = currentUser.nombre;
+            } else {
+                updates.aprobadoPorAdmin = currentUid;
+                updates.nombreAdmin = currentUser.nombre;
+            }
+        }
+
+        await db.collection('lans_pedidos').doc(pedidoId).update(updates);
+        showAlert(nuevoEstado === 'rechazado' ? 'Pedido rechazado' : 'Pedido actualizado', nuevoEstado === 'rechazado' ? 'warning' : 'success');
+
+        if (currentUser.rol === 'lider') showAprobar();
+        else showAdminPedidos();
+    } catch (e) {
+        showAlert('Error: ' + e.message, 'danger');
+    }
+}
+
+async function eliminarPedido(pedidoId) {
+    if (!confirm('Eliminar este pedido? Esta accion no se puede deshacer.')) return;
+    try {
+        await db.collection('lans_pedidos').doc(pedidoId).delete();
+        showAlert('Pedido eliminado', 'warning');
+        showAdminPedidos();
+    } catch (e) {
+        showAlert('Error: ' + e.message, 'danger');
+    }
+}
+
+// ═══════════════════════════════
+//  VIEW: Movimientos (Almacen - solo lectura, sin costos)
 // ═══════════════════════════════
 
 async function showMovimientos(filtro) {
@@ -606,6 +719,7 @@ async function showMovimientos(filtro) {
     const filters = [
         { key: 'todos', label: 'Todos', icon: 'bi-grid' },
         { key: 'pendiente', label: 'Pendientes', icon: 'bi-hourglass-split' },
+        { key: 'aprobado_lider', label: 'Aprobado Lider', icon: 'bi-person-check' },
         { key: 'aprobado', label: 'Aprobados', icon: 'bi-check-circle' },
         { key: 'rechazado', label: 'Rechazados', icon: 'bi-x-circle' }
     ];
@@ -665,14 +779,18 @@ async function showMovimientos(filtro) {
 // ═══════════════════════════════
 
 async function showAdminPedidos(filtro) {
-    filtro = filtro || 'pendiente';
+    filtro = filtro || 'por_aprobar';
     setActiveNav('showAdminPedidos');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
 
     let snap;
     try {
-        if (filtro === 'todos') {
+        if (filtro === 'por_aprobar') {
+            snap = await db.collection('lans_pedidos')
+                .where('estado', 'in', ['pendiente', 'aprobado_lider'])
+                .get();
+        } else if (filtro === 'todos') {
             snap = await db.collection('lans_pedidos').get();
         } else {
             snap = await db.collection('lans_pedidos')
@@ -689,7 +807,7 @@ async function showAdminPedidos(filtro) {
     adminPedidos.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
     const filters = [
-        { key: 'pendiente', label: 'Por Aprobar', icon: 'bi-hourglass-split' },
+        { key: 'por_aprobar', label: 'Por Aprobar', icon: 'bi-hourglass-split' },
         { key: 'aprobado', label: 'Aprobados', icon: 'bi-check-circle' },
         { key: 'rechazado', label: 'Rechazados', icon: 'bi-x-circle' },
         { key: 'todos', label: 'Todos', icon: 'bi-grid' }
@@ -717,7 +835,7 @@ async function showAdminPedidos(filtro) {
         const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
 
         let actions = '';
-        if (p.estado === 'pendiente') {
+        if (p.estado === 'pendiente' || p.estado === 'aprobado_lider') {
             actions = `
                 <button class="btn btn-success btn-sm me-1" onclick="aprobarPedido('${p.id}','aprobado')" title="Aprobar">
                     <i class="bi bi-check-lg"></i>
@@ -735,7 +853,6 @@ async function showAdminPedidos(filtro) {
             <tr>
                 <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
                 <td>${p.nombreEmpleado}</td>
-                <td><small class="text-muted">${p.rol || ''}</small></td>
                 <td>${p.area}</td>
                 <td><small>${itemsList}</small></td>
                 <td class="text-center">${totalItems}</td>
@@ -752,7 +869,7 @@ async function showAdminPedidos(filtro) {
             <div class="table-responsive">
                 <table class="table table-lans table-hover mb-0">
                     <thead><tr>
-                        <th>ID</th><th>Solicitante</th><th>Rol</th><th>Area</th><th>Productos</th>
+                        <th>ID</th><th>Empleado</th><th>Area</th><th>Productos</th>
                         <th class="text-center">Cant.</th><th class="text-center">Estado</th>
                         <th>Fecha</th><th class="text-center">Acciones</th>
                     </tr></thead>
@@ -760,34 +877,6 @@ async function showAdminPedidos(filtro) {
                 </table>
             </div>
         </div>`;
-}
-
-async function aprobarPedido(pedidoId, nuevoEstado) {
-    try {
-        const updates = {
-            estado: nuevoEstado,
-            aprobadoPorAdmin: currentUid,
-            nombreAdmin: currentUser.nombre,
-            fechaAprobacionAdmin: firebase.firestore.FieldValue.serverTimestamp()
-        };
-
-        await db.collection('lans_pedidos').doc(pedidoId).update(updates);
-        showAlert(nuevoEstado === 'rechazado' ? 'Pedido rechazado' : 'Pedido aprobado', nuevoEstado === 'rechazado' ? 'warning' : 'success');
-        showAdminPedidos();
-    } catch (e) {
-        showAlert('Error: ' + e.message, 'danger');
-    }
-}
-
-async function eliminarPedido(pedidoId) {
-    if (!confirm('Eliminar este pedido? Esta accion no se puede deshacer.')) return;
-    try {
-        await db.collection('lans_pedidos').doc(pedidoId).delete();
-        showAlert('Pedido eliminado', 'warning');
-        showAdminPedidos();
-    } catch (e) {
-        showAlert('Error: ' + e.message, 'danger');
-    }
 }
 
 // ═══════════════════════════════
@@ -866,7 +955,7 @@ async function showExportar() {
                 <table class="table table-lans table-hover mb-0">
                     <thead><tr>
                         <th class="text-center"><input type="checkbox" class="form-check-input" onchange="toggleAllExport(this.checked)"></th>
-                        <th>ID</th><th>Solicitante</th><th>Area</th><th>Productos</th><th>Fecha</th>
+                        <th>ID</th><th>Empleado</th><th>Area</th><th>Productos</th><th>Fecha</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -966,7 +1055,7 @@ async function descargarExcel() {
 }
 
 // ═══════════════════════════════
-//  VIEW: Historial
+//  VIEW: Historial por Area
 // ═══════════════════════════════
 
 async function showHistorial() {
@@ -998,7 +1087,7 @@ async function showHistorial() {
         porArea[area].total++;
         if (p.estado === 'aprobado') porArea[area].aprobados++;
         if (p.estado === 'rechazado') porArea[area].rechazados++;
-        if (p.estado === 'pendiente') porArea[area].pendientes++;
+        if (p.estado === 'pendiente' || p.estado === 'aprobado_lider') porArea[area].pendientes++;
 
         (p.detalles || []).forEach(item => {
             porArea[area].articulos += item.cantidad;
@@ -1012,7 +1101,7 @@ async function showHistorial() {
     const totalPedidos = pedidos.length;
     const totalArticulos = pedidos.reduce((s, p) => s + (p.detalles || []).reduce((ss, i) => ss + i.cantidad, 0), 0);
     const totalAprobados = pedidos.filter(p => p.estado === 'aprobado').length;
-    const totalPendientes = pedidos.filter(p => p.estado === 'pendiente').length;
+    const totalPendientes = pedidos.filter(p => p.estado === 'pendiente' || p.estado === 'aprobado_lider').length;
     const totalRechazados = pedidos.filter(p => p.estado === 'rechazado').length;
 
     const kpis = `
@@ -1493,8 +1582,8 @@ async function showUsuarios() {
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Rol</label>
                             <select id="newUserRol" class="form-select form-select-sm">
-                                <option value="lider">Lider</option>
                                 <option value="almacen">Almacen</option>
+                                <option value="lider">Lider de Area</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
@@ -1567,10 +1656,17 @@ async function deleteUsuario(uid, nombre) {
 
 function badgeEstado(estado) {
     const map = {
-        pendiente: { clase: 'badge-pendiente', texto: 'Pendiente' },
-        aprobado:  { clase: 'badge-aprobado',  texto: 'Aprobado' },
-        rechazado: { clase: 'badge-rechazado',  texto: 'Rechazado' }
+        pendiente:      { clase: 'badge-pendiente',      texto: 'Pendiente' },
+        aprobado_lider: { clase: 'badge-aprobado-lider',  texto: 'Aprobado Lider' },
+        aprobado:       { clase: 'badge-aprobado',        texto: 'Aprobado' },
+        rechazado:      { clase: 'badge-rechazado',       texto: 'Rechazado' }
     };
     const b = map[estado] || { clase: 'bg-secondary', texto: estado };
     return `<span class="badge ${b.clase}">${b.texto}</span>`;
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style');
+    style.textContent = '.text-lans { color: #1b4332 !important; }';
+    document.head.appendChild(style);
+});

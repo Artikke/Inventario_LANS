@@ -293,11 +293,11 @@ function renderNav() {
             </button>
             <div class="collapse navbar-collapse" id="navMenu">
                 <ul class="navbar-nav me-auto">${links}</ul>
-                <span class="navbar-text text-white me-3">
+                <span class="navbar-text me-3">
                     <i class="bi bi-person-circle me-1"></i>${currentUser.nombre}
                     <small class="ms-1 opacity-75">(${role})</small>
                 </span>
-                <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                <button class="btn btn-outline-danger btn-sm" onclick="logout()">
                     <i class="bi bi-box-arrow-right me-1"></i>Salir
                 </button>
             </div>

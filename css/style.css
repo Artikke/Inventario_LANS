@@ -1,12 +1,12 @@
 /* LANS - Sistema de Inventario
-   Laboratorios */
+   Laboratorios — Blanco con Azul */
 
 :root {
-    --lans-green: #1b4332;
-    --lans-dark: #0d2818;
-    --lans-light: #d8f3dc;
-    --lans-accent: #2d6a4f;
-    --lans-bg: #f0f5f1;
+    --lans-blue: #1a5276;
+    --lans-dark: #0e3650;
+    --lans-light: #d4e6f1;
+    --lans-accent: #2980b9;
+    --lans-bg: #f5f7fa;
     --lans-success: #27ae60;
     --lans-warning: #f39c12;
     --lans-danger: #e74c3c;
@@ -20,20 +20,21 @@ body {
     flex-direction: column;
 }
 
-/* Navbar */
+/* Navbar — BLANCO con texto azul */
 .navbar-lans {
-    background: linear-gradient(135deg, var(--lans-dark), var(--lans-green));
-    box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,.1);
     padding: .5rem 1rem;
+    border-bottom: 3px solid var(--lans-blue);
 }
 .navbar-lans .navbar-brand {
-    color: #fff !important;
+    color: var(--lans-blue) !important;
     font-weight: 700;
     font-size: 1.3rem;
     letter-spacing: 1px;
 }
 .navbar-lans .nav-link {
-    color: rgba(255,255,255,.85) !important;
+    color: var(--lans-dark) !important;
     font-weight: 500;
     padding: .5rem .8rem;
     border-radius: .375rem;
@@ -42,19 +43,22 @@ body {
 .navbar-lans .nav-link:hover,
 .navbar-lans .nav-link.active {
     color: #fff !important;
-    background: rgba(255,255,255,.15);
+    background: var(--lans-blue);
 }
 .navbar-lans .navbar-toggler {
-    border-color: rgba(255,255,255,.3);
-    color: #fff;
+    border-color: var(--lans-blue);
+    color: var(--lans-blue);
 }
 .navbar-lans .navbar-toggler-icon {
-    filter: invert(1);
+    filter: none;
+}
+.navbar-lans .navbar-text {
+    color: var(--lans-dark) !important;
 }
 
 /* Buttons */
 .btn-lans {
-    background: linear-gradient(135deg, var(--lans-green), var(--lans-accent));
+    background: var(--lans-blue);
     color: #fff;
     border: none;
     font-weight: 600;
@@ -63,49 +67,51 @@ body {
     transition: all .2s;
 }
 .btn-lans:hover {
-    background: linear-gradient(135deg, var(--lans-dark), var(--lans-green));
+    background: var(--lans-dark);
     color: #fff;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(27,67,50,.3);
+    box-shadow: 0 4px 12px rgba(26,82,118,.3);
 }
 .btn-lans:active { transform: translateY(0); }
 
 .btn-outline-lans {
-    color: var(--lans-green);
-    border: 2px solid var(--lans-green);
+    color: var(--lans-blue);
+    border: 2px solid var(--lans-blue);
     background: transparent;
     font-weight: 600;
 }
 .btn-outline-lans:hover {
-    background: var(--lans-green);
+    background: var(--lans-blue);
     color: #fff;
 }
 
-/* Cards */
+/* Cards — borde azul, fondo blanco */
 .card-lans {
-    border: none;
+    border: 1px solid #e0e8ef;
     border-radius: .75rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
     transition: transform .2s, box-shadow .2s;
+    background: #fff;
 }
 .card-lans:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    box-shadow: 0 6px 20px rgba(0,0,0,.1);
 }
 .card-header-lans {
-    background: linear-gradient(135deg, var(--lans-green), var(--lans-accent));
-    color: #fff;
+    background: #fff;
+    color: var(--lans-blue);
     font-weight: 600;
     border-radius: .75rem .75rem 0 0 !important;
     padding: .75rem 1.25rem;
+    border-bottom: 2px solid var(--lans-blue);
 }
 
-/* Tables */
+/* Tables — encabezado blanco con texto azul */
 .table-lans thead th {
-    background: var(--lans-green);
-    color: #fff;
-    font-weight: 600;
-    border: none;
+    background: #fff;
+    color: var(--lans-blue);
+    font-weight: 700;
+    border-bottom: 2px solid var(--lans-blue);
     white-space: nowrap;
     padding: .6rem .75rem;
 }
@@ -113,13 +119,13 @@ body {
     background: var(--lans-light);
 }
 
-/* Login Page */
+/* Login Page — fondo blanco/claro con acentos azules */
 .login-page {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--lans-dark) 0%, var(--lans-green) 50%, var(--lans-accent) 100%);
+    background: linear-gradient(135deg, #f0f4f8 0%, #d4e6f1 50%, #eaf2f8 100%);
     padding: 1rem;
 }
 .login-container { width: 100%; max-width: 420px; }
@@ -127,14 +133,15 @@ body {
     background: #fff;
     border-radius: 1rem;
     padding: 2rem;
-    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    box-shadow: 0 20px 60px rgba(26,82,118,.15);
+    border-top: 4px solid var(--lans-blue);
 }
 .login-header {
     text-align: center;
     margin-bottom: 1.5rem;
 }
 .login-header h1 {
-    color: var(--lans-green);
+    color: var(--lans-blue);
     font-weight: 800;
     font-size: 2.2rem;
     letter-spacing: 3px;
@@ -149,9 +156,10 @@ body {
 }
 .login-footer {
     text-align: center;
-    color: rgba(255,255,255,.6);
+    color: var(--lans-dark);
     font-size: .8rem;
     margin-top: 1.5rem;
+    opacity: .5;
 }
 
 /* Badges */
@@ -163,15 +171,15 @@ body {
 /* Accordion */
 .accordion-lans .accordion-button {
     font-weight: 600;
-    color: var(--lans-dark);
-    background: var(--lans-light);
+    color: var(--lans-blue);
+    background: #f8fafc;
 }
 .accordion-lans .accordion-button:not(.collapsed) {
-    background: var(--lans-green);
-    color: #fff;
+    background: var(--lans-light);
+    color: var(--lans-dark);
 }
 .accordion-lans .accordion-button:focus {
-    box-shadow: 0 0 0 .2rem rgba(27,67,50,.25);
+    box-shadow: 0 0 0 .2rem rgba(26,82,118,.2);
 }
 
 /* Order Summary */
@@ -181,11 +189,11 @@ body {
     background: #fff;
     border-radius: .75rem;
     padding: 1.25rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,.08);
-    border-left: 4px solid var(--lans-green);
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    border-left: 4px solid var(--lans-blue);
 }
 .order-summary h6 {
-    color: var(--lans-green);
+    color: var(--lans-blue);
     font-weight: 700;
 }
 .order-summary .summary-item {
@@ -207,18 +215,19 @@ body {
 }
 .search-box input { padding-left: 2.2rem; }
 
-/* Footer */
+/* Footer — blanco con texto azul */
 .footer-lans {
-    background: var(--lans-dark);
-    color: rgba(255,255,255,.7);
+    background: #fff;
+    color: var(--lans-dark);
     padding: .75rem 0;
     font-size: .85rem;
     margin-top: auto;
+    border-top: 2px solid var(--lans-blue);
 }
 
 /* Alerts */
 .alert-lans {
-    border-left: 4px solid var(--lans-green);
+    border-left: 4px solid var(--lans-blue);
     background: var(--lans-light);
     color: var(--lans-dark);
 }
@@ -231,7 +240,7 @@ body {
     font-weight: 500;
 }
 .filter-tabs .btn.active {
-    background: var(--lans-green);
+    background: var(--lans-blue);
     color: #fff;
 }
 
@@ -262,11 +271,11 @@ body {
 
 /* User card */
 .user-card {
-    border-left: 4px solid var(--lans-green);
+    border-left: 4px solid var(--lans-blue);
 }
 
 /* Text color helper */
-.text-lans { color: var(--lans-green) !important; }
+.text-lans { color: var(--lans-blue) !important; }
 
 /* Responsive */
 @media (max-width: 768px) {

@@ -47,7 +47,7 @@ const PRODUCTOS = {
         { nombre: 'Carpeta Blanca 3"', unidad: 'Pieza', costo: 49.11 },
         { nombre: 'Folder tamano carta color manila', unidad: 'Pieza', costo: 1.58 },
         { nombre: 'Protector de hojas tamano carta (paquete c/100)', unidad: 'Pieza', costo: 66.68 },
-        { nombre: 'Revistero Negro tamano carta', unidad: 'Pieza', costo: 82.50 }
+        { nombre: 'Revistero Negro tamano carta', unidad: 'Pieza', costo: 82.5 }
     ],
     'Cintas y Adhesivos': [
         { nombre: 'Cinta Acroprint Negro, para reloj checador TR 810', unidad: 'Pieza', costo: 110.83 },
@@ -55,12 +55,12 @@ const PRODUCTOS = {
         { nombre: 'Cinta Etiquetadora Brother QL 800 (DK2210)', unidad: 'Pieza', costo: 377.78 },
         { nombre: 'Kola loka', unidad: 'Pieza', costo: 30.52 },
         { nombre: 'Lapiz adhesivo Pritt', unidad: 'Pieza', costo: 27.08 },
-        { nombre: 'Masking 1"', unidad: 'Pieza', costo: 38.90 }
+        { nombre: 'Masking 1"', unidad: 'Pieza', costo: 38.9 }
     ],
     'Clips y Sujetadores': [
         { nombre: 'Clips #2 (caja con 10 pqts)', unidad: 'Pieza', costo: 68.57 },
-        { nombre: 'Clips mariposa #1', unidad: 'Pieza', costo: 18.00 },
-        { nombre: 'Clips mariposa #2', unidad: 'Pieza', costo: 25.20 },
+        { nombre: 'Clips mariposa #1', unidad: 'Pieza', costo: 18 },
+        { nombre: 'Clips mariposa #2', unidad: 'Pieza', costo: 25.2 },
         { nombre: 'Dedales #11 (paquete con 10 pzs)', unidad: 'Pieza', costo: 29.08 },
         { nombre: 'Dedales #13 (paquete con 10 pzs)', unidad: 'Pieza', costo: 29.08 },
         { nombre: 'Engrapadora', unidad: 'Pieza', costo: 59.66 },
@@ -70,12 +70,12 @@ const PRODUCTOS = {
         { nombre: 'Pinzas quitagrapas', unidad: 'Pieza', costo: 12.02 }
     ],
     'Cuadernos y Papeleria': [
-        { nombre: 'Cuaderno forma francesa cuadro ch', unidad: 'Pieza', costo: 14.00 },
-        { nombre: 'Cuaderno forma francesa cuadro grande', unidad: 'Pieza', costo: 14.00 },
-        { nombre: 'Cuaderno profesional cuadro ch', unidad: 'Pieza', costo: 14.30 },
-        { nombre: 'Cuaderno profesional cuadro grande', unidad: 'Pieza', costo: 14.70 },
-        { nombre: 'Hojas blancas paquetes de 500 hojas c/u', unidad: 'Pieza', costo: 57.00 },
-        { nombre: 'Regla metalica 30 cm', unidad: 'Pieza', costo: 15.90 },
+        { nombre: 'Cuaderno forma francesa cuadro ch', unidad: 'Pieza', costo: 14 },
+        { nombre: 'Cuaderno forma francesa cuadro grande', unidad: 'Pieza', costo: 14 },
+        { nombre: 'Cuaderno profesional cuadro ch', unidad: 'Pieza', costo: 14.3 },
+        { nombre: 'Cuaderno profesional cuadro grande', unidad: 'Pieza', costo: 14.7 },
+        { nombre: 'Hojas blancas paquetes de 500 hojas c/u', unidad: 'Pieza', costo: 57 },
+        { nombre: 'Regla metalica 30 cm', unidad: 'Pieza', costo: 15.9 },
         { nombre: 'Sacapuntas', unidad: 'Pieza', costo: 1.52 },
         { nombre: 'Tijeras', unidad: 'Pieza', costo: 30.32 }
     ],
@@ -92,14 +92,14 @@ const PRODUCTOS = {
         { nombre: 'Pluma Verde punto medio', unidad: 'Pieza', costo: 39.57 },
         { nombre: 'Plumon Esterbrook', unidad: 'Pieza', costo: 31.16 },
         { nombre: 'Plumon Sharpie azul', unidad: 'Pieza', costo: 7.83 },
-        { nombre: 'Plumon Sharpie negro', unidad: 'Pieza', costo: 11.40 },
+        { nombre: 'Plumon Sharpie negro', unidad: 'Pieza', costo: 11.4 },
         { nombre: 'Plumon Sharpie plateado', unidad: 'Pieza', costo: 16.33 },
         { nombre: 'Plumones para pizarron (caja con 4 colores)', unidad: 'Pieza', costo: 49.37 }
     ],
     'Pilas': [
         { nombre: 'Pila redonda para reloj LR44', unidad: 'Pieza', costo: 23.39 },
-        { nombre: 'Pilas AA', unidad: 'Pieza', costo: 18.68 },
-        { nombre: 'Pilas AAA', unidad: 'Pieza', costo: 18.68 },
+        { nombre: 'Pilas AA', unidad: 'Pieza', costo: 18.675 },
+        { nombre: 'Pilas AAA', unidad: 'Pieza', costo: 18.675 },
         { nombre: 'Pilas CR2032 3v', unidad: 'Pieza', costo: 7.24 },
         { nombre: 'Pilas cuadradas 9v', unidad: 'Pieza', costo: 116.18 },
         { nombre: 'Pilas LR45 1.5v (paquete c/10)', unidad: 'Pieza', costo: 73.64 },
@@ -111,7 +111,7 @@ const PRODUCTOS = {
         { nombre: 'TINTA HP954XL (magenta)', unidad: 'Pieza', costo: 612.85 },
         { nombre: 'TINTA HP954XL (negro)', unidad: 'Pieza', costo: 612.85 },
         { nombre: 'Toner W150A (elisas) A', unidad: 'Pieza', costo: 434.26 },
-        { nombre: 'Toner W150A (elisas) B', unidad: 'Pieza', costo: 265.00 }
+        { nombre: 'Toner W150A (elisas) B', unidad: 'Pieza', costo: 265 }
     ]
 };
 

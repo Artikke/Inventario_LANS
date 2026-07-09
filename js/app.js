@@ -1,5 +1,5 @@
 /* LANS - Sistema de Inventario (GitHub Pages + Firebase)
-   Identico a PROESA + rol "almacen" (ve todo, no edita, no ve costos) */
+   Comparte usuarios con PROESA — usa campo rolLans */
 
 const firebaseConfig = {
     apiKey: "AIzaSyA2TBZwWuebLhxb32BYcxr4DGb1A-iDC84",
@@ -31,7 +31,14 @@ const AREAS = [
     'Administracion',
     'Recepcion',
     'Toma de Muestras',
-    'Calidad'
+    'Calidad',
+    'Talento Humano',
+    'Contabilidad',
+    'Finanzas',
+    'Credito y Cobranza',
+    'Abastecimiento y Compras',
+    'Tecnologia de Informacion (TI)',
+    'Business Intelligence (BI)'
 ];
 
 const PRODUCTOS = {
@@ -109,23 +116,31 @@ const PRODUCTOS = {
 };
 
 // ═══════════════════════════════
-//  AUTH
+//  AUTH — usa coleccion 'usuarios' compartida, campo 'rolLans'
 // ═══════════════════════════════
 
 auth.onAuthStateChanged(async user => {
     if (user) {
-        // Ignorar usuarios de PROESA — no hacer signOut para no afectar la otra sesion
-        if (user.email && !user.email.endsWith('@lans.app')) {
-            showLogin();
-            return;
-        }
         currentUid = user.uid;
-        const doc = await db.collection('lans_usuarios').doc(user.uid).get();
-        if (doc.exists) {
-            currentUser = { id: doc.id, ...doc.data() };
-            showApp();
-        } else {
-            auth.signOut();
+        try {
+            const doc = await db.collection('usuarios').doc(user.uid).get();
+            if (doc.exists) {
+                const data = { id: doc.id, ...doc.data() };
+                if (data.rolLans) {
+                    currentUser = data;
+                    showApp();
+                } else if (data.rol === 'admin') {
+                    currentUser = data;
+                    showSetupLans();
+                } else {
+                    showNoAccess();
+                }
+            } else {
+                showNoAccess();
+            }
+        } catch (e) {
+            document.getElementById('mainContent').innerHTML =
+                `<div class="alert alert-danger m-3">Error: ${e.message}</div>`;
         }
     } else {
         currentUser = null;
@@ -151,8 +166,15 @@ async function login() {
     alert.classList.add('d-none');
 
     try {
-        const email = userInput.includes('@') ? userInput : `${userInput}@lans.app`;
-        await auth.signInWithEmailAndPassword(email, pass);
+        if (userInput.includes('@')) {
+            await auth.signInWithEmailAndPassword(userInput, pass);
+        } else {
+            try {
+                await auth.signInWithEmailAndPassword(`${userInput}@proesa.app`, pass);
+            } catch {
+                await auth.signInWithEmailAndPassword(`${userInput}@lans.app`, pass);
+            }
+        }
     } catch (e) {
         alert.textContent = 'Usuario o contrasena incorrectos';
         alert.classList.remove('d-none');
@@ -179,74 +201,72 @@ function showApp() {
     document.getElementById('loginView').style.display = 'none';
     document.getElementById('appView').style.display   = '';
     renderNav();
-    if (currentUser.rol === 'admin') showAdminPedidos();
-    else if (currentUser.rol === 'lider') showAprobar();
-    else if (currentUser.rol === 'almacen') showMovimientos();
+    const role = currentUser.rolLans;
+    if (role === 'admin') showAdminPedidos();
+    else if (role === 'lider') showAprobar();
+    else if (role === 'almacen') showMovimientos();
     else showNuevoPedido();
 }
 
-// ─── Setup (first time) ───
-async function toggleSetup(show) {
-    if (show) {
-        const existing = await db.collection('lans_usuarios').where('rol', '==', 'admin').limit(1).get();
-        if (!existing.empty) {
-            const alert = document.getElementById('loginAlert');
-            alert.textContent = 'El sistema ya fue configurado. Inicia sesion con tu usuario.';
-            alert.classList.remove('d-none');
-            return;
-        }
-    }
-    document.getElementById('setupFormDiv').classList.toggle('d-none', !show);
-    document.getElementById('loginFormDiv').classList.toggle('d-none', show);
-    document.getElementById('setupToggle').classList.toggle('d-none', show);
+function showNoAccess() {
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('appView').style.display   = '';
+    document.getElementById('mainNav').innerHTML = `
+        <div class="container-fluid">
+            <span class="navbar-brand"><i class="bi bi-building me-2"></i>LANS</span>
+        </div>`;
+    document.getElementById('mainContent').innerHTML = `
+        <div class="text-center py-5">
+            <i class="bi bi-lock" style="font-size:3rem;color:var(--lans-blue)"></i>
+            <h4 class="mt-3">Sin acceso a LANS</h4>
+            <p class="text-muted">Tu cuenta no tiene acceso a este sistema.<br>Contacta al administrador.</p>
+            <button class="btn btn-outline-secondary" onclick="logout()">
+                <i class="bi bi-box-arrow-right me-1"></i>Salir
+            </button>
+        </div>`;
 }
 
-async function setupAdmin() {
-    const existing = await db.collection('lans_usuarios').where('rol', '==', 'admin').limit(1).get();
-    if (!existing.empty) {
-        const alert = document.getElementById('loginAlert');
-        alert.textContent = 'El sistema ya fue configurado. No se puede crear otro admin.';
-        alert.classList.remove('d-none');
-        return;
-    }
+function showSetupLans() {
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('appView').style.display   = '';
+    document.getElementById('mainNav').innerHTML = `
+        <div class="container-fluid">
+            <span class="navbar-brand"><i class="bi bi-building me-2"></i>LANS</span>
+        </div>`;
+    document.getElementById('mainContent').innerHTML = `
+        <div class="text-center py-5">
+            <i class="bi bi-gear" style="font-size:3rem;color:var(--lans-blue)"></i>
+            <h4 class="mt-3">Configurar LANS</h4>
+            <p class="text-muted">Eres admin de PROESA. Activa tu acceso a LANS y carga los 57 productos.</p>
+            <button class="btn btn-lans btn-lg" onclick="activarLans()">
+                <i class="bi bi-rocket-takeoff me-2"></i>Activar LANS
+            </button>
+            <br><br>
+            <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Salir</button>
+        </div>`;
+}
 
-    const nombre = document.getElementById('setupNombre').value.trim();
-    const user   = document.getElementById('setupUser').value.trim();
-    const pass   = document.getElementById('setupPass').value;
-    const alert  = document.getElementById('loginAlert');
-
-    if (!nombre || !user || pass.length < 6) {
-        alert.textContent = 'Completa todos los campos (contrasena min 6 caracteres)';
-        alert.classList.remove('d-none');
-        return;
-    }
-
+async function activarLans() {
     try {
-        alert.classList.add('d-none');
-        const email = `${user}@lans.app`;
-        const cred  = await auth.createUserWithEmailAndPassword(email, pass);
-
-        await db.collection('lans_usuarios').doc(cred.user.uid).set({
-            nombre: nombre,
-            usuario: user,
-            email: email,
-            rol: 'admin',
-            area: 'Administracion',
-            activo: true,
-            creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+        await db.collection('usuarios').doc(currentUid).update({
+            rolLans: 'admin'
         });
 
-        await cargarDatosIniciales();
-        showAlert('Sistema configurado correctamente con 57 productos', 'success');
+        const existing = await db.collection('lans_productos').limit(1).get();
+        if (existing.empty) {
+            await cargarDatosIniciales();
+        }
+
+        currentUser.rolLans = 'admin';
+        showAlert('LANS activado con 57 productos', 'success');
+        showApp();
     } catch (e) {
-        alert.textContent = 'Error: ' + e.message;
-        alert.classList.remove('d-none');
+        showAlert('Error: ' + e.message, 'danger');
     }
 }
 
 async function cargarDatosIniciales() {
     const batch = db.batch();
-
     for (const [categoria, items] of Object.entries(PRODUCTOS)) {
         for (const item of items) {
             const ref = db.collection('lans_productos').doc();
@@ -259,7 +279,6 @@ async function cargarDatosIniciales() {
             });
         }
     }
-
     await batch.commit();
 }
 
@@ -269,10 +288,9 @@ async function cargarDatosIniciales() {
 
 function renderNav() {
     const nav = document.getElementById('mainNav');
-    const role = currentUser.rol;
+    const role = currentUser.rolLans;
     let links = '';
 
-    // Todos pueden pedir material
     links += navLink('showNuevoPedido', 'bi-cart-plus', 'Nuevo Pedido');
     links += navLink('showMisPedidos', 'bi-list-check', 'Mis Pedidos');
 
@@ -346,7 +364,7 @@ function showAlert(msg, type = 'info') {
 async function showNuevoPedido() {
     setActiveNav('showNuevoPedido');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     const snap = await db.collection('lans_productos').where('activo', '==', true).get();
     const productos = {};
@@ -487,13 +505,13 @@ async function submitPedido() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
 
     try {
-        // Admin y lider saltan aprobacion de lider
-        const saltaLider = currentUser.rol === 'admin' || currentUser.rol === 'lider';
+        const role = currentUser.rolLans;
+        const saltaLider = role === 'admin' || role === 'lider';
         await db.collection('lans_pedidos').add({
             uid: currentUid,
             nombreEmpleado: currentUser.nombre,
             area: currentUser.area,
-            rol: currentUser.rol,
+            rolLans: role,
             detalles: detalles,
             estado: saltaLider ? 'aprobado_lider' : 'pendiente',
             fecha: firebase.firestore.FieldValue.serverTimestamp(),
@@ -519,13 +537,11 @@ async function submitPedido() {
 async function showMisPedidos() {
     setActiveNav('showMisPedidos');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
-        snap = await db.collection('lans_pedidos')
-            .where('uid', '==', currentUid)
-            .get();
+        snap = await db.collection('lans_pedidos').where('uid', '==', currentUid).get();
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar pedidos: ${e.message}</div>`;
         return;
@@ -589,7 +605,7 @@ async function showMisPedidos() {
 async function showAprobar() {
     setActiveNav('showAprobar');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
@@ -653,6 +669,7 @@ async function showAprobar() {
 
 async function aprobarPedido(pedidoId, nuevoEstado) {
     try {
+        const role = currentUser.rolLans;
         const updates = { estado: nuevoEstado };
         if (nuevoEstado === 'aprobado_lider') {
             updates.aprobadoPorLider = currentUid;
@@ -663,7 +680,7 @@ async function aprobarPedido(pedidoId, nuevoEstado) {
             updates.nombreAdmin = currentUser.nombre;
             updates.fechaAprobacionAdmin = firebase.firestore.FieldValue.serverTimestamp();
         } else if (nuevoEstado === 'rechazado') {
-            if (currentUser.rol === 'lider') {
+            if (role === 'lider') {
                 updates.aprobadoPorLider = currentUid;
                 updates.nombreLider = currentUser.nombre;
             } else {
@@ -675,7 +692,7 @@ async function aprobarPedido(pedidoId, nuevoEstado) {
         await db.collection('lans_pedidos').doc(pedidoId).update(updates);
         showAlert(nuevoEstado === 'rechazado' ? 'Pedido rechazado' : 'Pedido actualizado', nuevoEstado === 'rechazado' ? 'warning' : 'success');
 
-        if (currentUser.rol === 'lider') showAprobar();
+        if (role === 'lider') showAprobar();
         else showAdminPedidos();
     } catch (e) {
         showAlert('Error: ' + e.message, 'danger');
@@ -701,16 +718,14 @@ async function showMovimientos(filtro) {
     filtro = filtro || 'todos';
     setActiveNav('showMovimientos');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
         if (filtro === 'todos') {
             snap = await db.collection('lans_pedidos').get();
         } else {
-            snap = await db.collection('lans_pedidos')
-                .where('estado', '==', filtro)
-                .get();
+            snap = await db.collection('lans_pedidos').where('estado', '==', filtro).get();
         }
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
@@ -787,20 +802,17 @@ async function showAdminPedidos(filtro) {
     filtro = filtro || 'por_aprobar';
     setActiveNav('showAdminPedidos');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
         if (filtro === 'por_aprobar') {
             snap = await db.collection('lans_pedidos')
-                .where('estado', 'in', ['pendiente', 'aprobado_lider'])
-                .get();
+                .where('estado', 'in', ['pendiente', 'aprobado_lider']).get();
         } else if (filtro === 'todos') {
             snap = await db.collection('lans_pedidos').get();
         } else {
-            snap = await db.collection('lans_pedidos')
-                .where('estado', '==', filtro)
-                .get();
+            snap = await db.collection('lans_pedidos').where('estado', '==', filtro).get();
         }
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar pedidos: ${e.message}</div>`;
@@ -891,13 +903,11 @@ async function showAdminPedidos(filtro) {
 async function showExportar() {
     setActiveNav('showExportar');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
-        snap = await db.collection('lans_pedidos')
-            .where('estado', '==', 'aprobado')
-            .get();
+        snap = await db.collection('lans_pedidos').where('estado', '==', 'aprobado').get();
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
         return;
@@ -919,7 +929,6 @@ async function showExportar() {
     exportPedidos.forEach(p => {
         const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
         const items = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
-
         rows += `
             <tr>
                 <td class="text-center">
@@ -977,26 +986,18 @@ async function descargarExcel() {
     const noInv = document.getElementById('noInventario').value.trim() || 'SIN-NUMERO';
     const checked = document.querySelectorAll('.export-check:checked');
 
-    if (checked.length === 0) {
-        showAlert('Selecciona al menos un pedido', 'warning');
-        return;
-    }
+    if (checked.length === 0) { showAlert('Selecciona al menos un pedido', 'warning'); return; }
 
     const consolidated = {};
     checked.forEach(cb => {
-        const detalles = JSON.parse(cb.dataset.detalles);
-        detalles.forEach(item => {
-            const key = item.nombre;
-            if (!consolidated[key]) {
-                consolidated[key] = { nombre: item.nombre, unidad: item.unidad, cantidad: 0 };
-            }
-            consolidated[key].cantidad += item.cantidad;
+        JSON.parse(cb.dataset.detalles).forEach(item => {
+            if (!consolidated[item.nombre]) consolidated[item.nombre] = { nombre: item.nombre, unidad: item.unidad, cantidad: 0 };
+            consolidated[item.nombre].cantidad += item.cantidad;
         });
     });
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Pedido LANS');
-
     ws.columns = [
         { header: 'No. Inventario', key: 'inv', width: 20 },
         { header: 'Descripcion de Linea', key: 'desc', width: 38 },
@@ -1006,100 +1007,58 @@ async function descargarExcel() {
 
     const headerRow = ws.getRow(1);
     headerRow.eachCell(cell => {
-        cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF1A5276' }
-        };
-        cell.font = {
-            color: { argb: 'FFFFFFFF' },
-            bold: true,
-            size: 11
-        };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A5276' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.border = {
-            top:    { style: 'thin', color: { argb: 'FF0E3650' } },
-            bottom: { style: 'thin', color: { argb: 'FF0E3650' } },
-            left:   { style: 'thin', color: { argb: 'FF0E3650' } },
-            right:  { style: 'thin', color: { argb: 'FF0E3650' } }
-        };
+        cell.border = { top: { style: 'thin', color: { argb: 'FF0E3650' } }, bottom: { style: 'thin', color: { argb: 'FF0E3650' } }, left: { style: 'thin', color: { argb: 'FF0E3650' } }, right: { style: 'thin', color: { argb: 'FF0E3650' } } };
     });
     headerRow.height = 22;
 
     Object.values(consolidated).forEach(item => {
-        const row = ws.addRow({
-            inv: noInv,
-            desc: item.nombre,
-            um: item.unidad,
-            cant: item.cantidad
-        });
+        const row = ws.addRow({ inv: noInv, desc: item.nombre, um: item.unidad, cant: item.cantidad });
         row.eachCell(cell => {
-            cell.border = {
-                top:    { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                left:   { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                right:  { style: 'thin', color: { argb: 'FFD4D4D4' } }
-            };
+            cell.border = { top: { style: 'thin', color: { argb: 'FFD4D4D4' } }, bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } }, left: { style: 'thin', color: { argb: 'FFD4D4D4' } }, right: { style: 'thin', color: { argb: 'FFD4D4D4' } } };
             cell.alignment = { vertical: 'middle' };
         });
     });
 
     const buffer = await wb.xlsx.writeBuffer();
     const fecha = new Date().toISOString().slice(0, 10);
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `LANS_Pedido_${fecha}.xlsx`);
-
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `LANS_Pedido_${fecha}.xlsx`);
     showAlert(`Excel descargado con ${Object.keys(consolidated).length} productos`, 'success');
 
     checked.forEach(async cb => {
-        await db.collection('lans_pedidos').doc(cb.value).update({
-            noInventario: noInv,
-            fechaExportacion: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        await db.collection('lans_pedidos').doc(cb.value).update({ noInventario: noInv, fechaExportacion: firebase.firestore.FieldValue.serverTimestamp() });
     });
 }
 
 // ═══════════════════════════════
-//  VIEW: Historial por Area
+//  VIEW: Historial
 // ═══════════════════════════════
 
 async function showHistorial() {
     setActiveNav('showHistorial');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
-    try {
-        snap = await db.collection('lans_pedidos').get();
-    } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar historial: ${e.message}</div>`;
-        return;
-    }
+    try { snap = await db.collection('lans_pedidos').get(); }
+    catch (e) { main.innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`; return; }
 
     const pedidos = [];
     snap.forEach(d => pedidos.push({ id: d.id, ...d.data() }));
 
     const porArea = {};
-    AREAS.forEach(a => {
-        porArea[a] = { total: 0, aprobados: 0, rechazados: 0, pendientes: 0, articulos: 0, productos: {} };
-    });
-
     pedidos.forEach(p => {
         const area = p.area;
-        if (!porArea[area]) {
-            porArea[area] = { total: 0, aprobados: 0, rechazados: 0, pendientes: 0, articulos: 0, productos: {} };
-        }
+        if (!porArea[area]) porArea[area] = { total: 0, aprobados: 0, rechazados: 0, pendientes: 0, articulos: 0, productos: {} };
         porArea[area].total++;
         if (p.estado === 'aprobado') porArea[area].aprobados++;
         if (p.estado === 'rechazado') porArea[area].rechazados++;
         if (p.estado === 'pendiente' || p.estado === 'aprobado_lider') porArea[area].pendientes++;
-
         (p.detalles || []).forEach(item => {
             porArea[area].articulos += item.cantidad;
-            if (!porArea[area].productos[item.nombre]) {
-                porArea[area].productos[item.nombre] = 0;
-            }
-            porArea[area].productos[item.nombre] += item.cantidad;
+            porArea[area].productos[item.nombre] = (porArea[area].productos[item.nombre] || 0) + item.cantidad;
         });
     });
 
@@ -1107,138 +1066,53 @@ async function showHistorial() {
     const totalArticulos = pedidos.reduce((s, p) => s + (p.detalles || []).reduce((ss, i) => ss + i.cantidad, 0), 0);
     const totalAprobados = pedidos.filter(p => p.estado === 'aprobado').length;
     const totalPendientes = pedidos.filter(p => p.estado === 'pendiente' || p.estado === 'aprobado_lider').length;
-    const totalRechazados = pedidos.filter(p => p.estado === 'rechazado').length;
 
     const kpis = `
         <div class="row mb-4">
-            <div class="col-6 col-md-3 mb-2">
-                <div class="card card-lans text-center p-3">
-                    <div class="fs-2 fw-bold text-lans">${totalPedidos}</div>
-                    <small class="text-muted">Total Pedidos</small>
-                </div>
-            </div>
-            <div class="col-6 col-md-3 mb-2">
-                <div class="card card-lans text-center p-3">
-                    <div class="fs-2 fw-bold" style="color:var(--lans-success)">${totalAprobados}</div>
-                    <small class="text-muted">Aprobados</small>
-                </div>
-            </div>
-            <div class="col-6 col-md-3 mb-2">
-                <div class="card card-lans text-center p-3">
-                    <div class="fs-2 fw-bold" style="color:var(--lans-warning)">${totalPendientes}</div>
-                    <small class="text-muted">Pendientes</small>
-                </div>
-            </div>
-            <div class="col-6 col-md-3 mb-2">
-                <div class="card card-lans text-center p-3">
-                    <div class="fs-2 fw-bold text-lans">${totalArticulos}</div>
-                    <small class="text-muted">Total Articulos</small>
-                </div>
-            </div>
+            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalPedidos}</div><small class="text-muted">Total Pedidos</small></div></div>
+            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold" style="color:var(--lans-success)">${totalAprobados}</div><small class="text-muted">Aprobados</small></div></div>
+            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold" style="color:var(--lans-warning)">${totalPendientes}</div><small class="text-muted">Pendientes</small></div></div>
+            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalArticulos}</div><small class="text-muted">Total Articulos</small></div></div>
         </div>`;
 
     let areaCards = '';
     for (const [area, stats] of Object.entries(porArea)) {
         if (stats.total === 0) continue;
-
-        const topProds = Object.entries(stats.productos)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-
-        const topList = topProds.map(([nombre, cant]) =>
-            `<div class="d-flex justify-content-between py-1 border-bottom" style="border-color:#eee!important">
-                <span class="small">${nombre}</span>
-                <span class="badge bg-secondary">${cant}</span>
-            </div>`
-        ).join('');
-
-        const maxPedidos = Math.max(...Object.values(porArea).map(s => s.total));
-        const barWidth = Math.round((stats.total / maxPedidos) * 100);
-
+        const topProds = Object.entries(stats.productos).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const topList = topProds.map(([n, c]) => `<div class="d-flex justify-content-between py-1 border-bottom" style="border-color:#eee!important"><span class="small">${n}</span><span class="badge bg-secondary">${c}</span></div>`).join('');
+        const maxP = Math.max(...Object.values(porArea).map(s => s.total));
         areaCards += `
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card card-lans h-100">
-                    <div class="card-header card-header-lans">
-                        <i class="bi bi-building me-2"></i>${area}
+            <div class="col-md-6 col-lg-4 mb-3"><div class="card card-lans h-100">
+                <div class="card-header card-header-lans"><i class="bi bi-building me-2"></i>${area}</div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2"><span class="fw-bold">${stats.total} pedidos</span><span class="small text-muted">${stats.articulos} articulos</span></div>
+                    <div class="progress mb-3" style="height:8px"><div class="progress-bar" style="width:${Math.round((stats.total/maxP)*100)}%;background:var(--lans-blue)"></div></div>
+                    <div class="d-flex gap-2 mb-3 flex-wrap">
+                        <span class="badge badge-aprobado"><i class="bi bi-check me-1"></i>${stats.aprobados}</span>
+                        <span class="badge badge-pendiente"><i class="bi bi-clock me-1"></i>${stats.pendientes}</span>
+                        <span class="badge badge-rechazado"><i class="bi bi-x me-1"></i>${stats.rechazados}</span>
                     </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="fw-bold">${stats.total} pedidos</span>
-                            <span class="small text-muted">${stats.articulos} articulos</span>
-                        </div>
-                        <div class="progress mb-3" style="height:8px">
-                            <div class="progress-bar" style="width:${barWidth}%;background:var(--lans-green)"></div>
-                        </div>
-                        <div class="d-flex gap-2 mb-3 flex-wrap">
-                            <span class="badge badge-aprobado"><i class="bi bi-check me-1"></i>${stats.aprobados}</span>
-                            <span class="badge badge-pendiente"><i class="bi bi-clock me-1"></i>${stats.pendientes}</span>
-                            <span class="badge badge-rechazado"><i class="bi bi-x me-1"></i>${stats.rechazados}</span>
-                        </div>
-                        <h6 class="small fw-bold text-muted mb-1">Mas solicitados:</h6>
-                        ${topList || '<span class="small text-muted">Sin productos</span>'}
-                    </div>
+                    <h6 class="small fw-bold text-muted mb-1">Mas solicitados:</h6>
+                    ${topList || '<span class="small text-muted">Sin productos</span>'}
                 </div>
-            </div>`;
+            </div></div>`;
     }
 
-    if (!areaCards) {
-        areaCards = `<div class="col-12">
-            <div class="empty-state">
-                <i class="bi bi-bar-chart-line"></i>
-                <h5>Sin historial</h5>
-                <p>Aun no hay pedidos registrados</p>
-            </div>
-        </div>`;
-    }
+    if (!areaCards) areaCards = '<div class="col-12"><div class="empty-state"><i class="bi bi-bar-chart-line"></i><h5>Sin historial</h5></div></div>';
 
     const globalProds = {};
-    pedidos.forEach(p => {
-        (p.detalles || []).forEach(item => {
-            if (!globalProds[item.nombre]) globalProds[item.nombre] = 0;
-            globalProds[item.nombre] += item.cantidad;
-        });
-    });
-    const topGlobal = Object.entries(globalProds)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10);
-
-    let topGlobalRows = '';
+    pedidos.forEach(p => (p.detalles || []).forEach(i => { globalProds[i.nombre] = (globalProds[i.nombre] || 0) + i.cantidad; }));
+    const topGlobal = Object.entries(globalProds).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    let topRows = '';
     if (topGlobal.length > 0) {
-        const maxCant = topGlobal[0][1];
-        topGlobalRows = topGlobal.map(([nombre, cant], i) => {
-            const pct = Math.round((cant / maxCant) * 100);
-            return `
-                <tr>
-                    <td class="text-center">${i + 1}</td>
-                    <td>${nombre}</td>
-                    <td>
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="progress flex-fill" style="height:6px">
-                                <div class="progress-bar" style="width:${pct}%;background:var(--lans-green)"></div>
-                            </div>
-                            <strong>${cant}</strong>
-                        </div>
-                    </td>
-                </tr>`;
-        }).join('');
+        const mx = topGlobal[0][1];
+        topRows = topGlobal.map(([n, c], i) => `<tr><td class="text-center">${i+1}</td><td>${n}</td><td><div class="d-flex align-items-center gap-2"><div class="progress flex-fill" style="height:6px"><div class="progress-bar" style="width:${Math.round((c/mx)*100)}%;background:var(--lans-blue)"></div></div><strong>${c}</strong></div></td></tr>`).join('');
     }
 
     main.innerHTML = `
         <h5 class="mb-3"><i class="bi bi-bar-chart-line me-2 text-lans"></i>Historial por Area</h5>
-        ${kpis}
-        <div class="row">${areaCards}</div>
-        ${topGlobal.length > 0 ? `
-        <div class="card card-lans mt-3">
-            <div class="card-header card-header-lans">
-                <i class="bi bi-trophy me-2"></i>Top 10 Productos Mas Solicitados
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead>
-                    <tbody>${topGlobalRows}</tbody>
-                </table>
-            </div>
-        </div>` : ''}`;
+        ${kpis}<div class="row">${areaCards}</div>
+        ${topGlobal.length > 0 ? `<div class="card card-lans mt-3"><div class="card-header card-header-lans"><i class="bi bi-trophy me-2"></i>Top 10 Productos</div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead><tbody>${topRows}</tbody></table></div></div>` : ''}`;
 }
 
 // ═══════════════════════════════
@@ -1248,7 +1122,7 @@ async function showHistorial() {
 async function showCatalogo() {
     setActiveNav('showCatalogo');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     const snap = await db.collection('lans_productos').get();
     const productos = {};
@@ -1260,10 +1134,8 @@ async function showCatalogo() {
         productos[p.categoria].push(p);
     });
 
-    const sortedCats = [...categorias].sort();
-
     let tables = '';
-    for (const cat of sortedCats) {
+    for (const cat of [...categorias].sort()) {
         const items = productos[cat] || [];
         const rows = items.map(p => `
             <tr class="${!p.activo ? 'table-secondary text-muted' : ''}">
@@ -1271,35 +1143,20 @@ async function showCatalogo() {
                 <td class="text-center">${p.unidad}</td>
                 <td class="text-center">
                     <input type="number" class="form-control form-control-sm" style="width:90px;display:inline"
-                           value="${p.costo || 0}" step="0.01" min="0"
-                           onchange="updateCosto('${p.id}', this.value)">
+                           value="${p.costo || 0}" step="0.01" min="0" onchange="updateCosto('${p.id}', this.value)">
                 </td>
+                <td class="text-center"><span class="badge ${p.activo ? 'bg-success' : 'bg-secondary'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
                 <td class="text-center">
-                    <span class="badge ${p.activo ? 'bg-success' : 'bg-secondary'}">
-                        ${p.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                </td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-outline-${p.activo ? 'warning' : 'success'}"
-                            onclick="toggleProducto('${p.id}', ${!p.activo})" title="${p.activo ? 'Desactivar' : 'Activar'}">
-                        <i class="bi bi-${p.activo ? 'pause' : 'play'}"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger ms-1"
-                            onclick="deleteProducto('${p.id}', '${p.nombre.replace(/'/g, "\\'")}')" title="Eliminar">
-                        <i class="bi bi-trash"></i>
-                    </button>
+                    <button class="btn btn-sm btn-outline-${p.activo ? 'warning' : 'success'}" onclick="toggleProducto('${p.id}', ${!p.activo})"><i class="bi bi-${p.activo ? 'pause' : 'play'}"></i></button>
+                    <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProducto('${p.id}', '${p.nombre.replace(/'/g, "\\'")}')"><i class="bi bi-trash"></i></button>
                 </td>
             </tr>`).join('');
 
         tables += `
             <div class="card card-lans mb-3">
                 <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-tag me-2 text-lans"></i>${cat}
-                        <span class="badge bg-secondary ms-1">${items.length}</span>
-                    </span>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteCategoria('${cat}')" title="Eliminar categoria">
-                        <i class="bi bi-trash me-1"></i>Eliminar
-                    </button>
+                    <span><i class="bi bi-tag me-2 text-lans"></i>${cat}<span class="badge bg-secondary ms-1">${items.length}</span></span>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteCategoria('${cat}')"><i class="bi bi-trash me-1"></i>Eliminar</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
@@ -1314,15 +1171,9 @@ async function showCatalogo() {
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0"><i class="bi bi-box-seam me-2 text-lans"></i>Catalogo de Productos</h5>
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-lans btn-sm" onclick="exportarCatalogo()">
-                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar
-                </button>
-                <button class="btn btn-success btn-sm" onclick="showAddCategoryForm()">
-                    <i class="bi bi-folder-plus me-1"></i>Categoria
-                </button>
-                <button class="btn btn-lans btn-sm" onclick="showAddProductForm()">
-                    <i class="bi bi-plus-lg me-1"></i>Producto
-                </button>
+                <button class="btn btn-outline-lans btn-sm" onclick="exportarCatalogo()"><i class="bi bi-file-earmark-excel me-1"></i>Exportar</button>
+                <button class="btn btn-success btn-sm" onclick="showAddCategoryForm()"><i class="bi bi-folder-plus me-1"></i>Categoria</button>
+                <button class="btn btn-lans btn-sm" onclick="showAddProductForm()"><i class="bi bi-plus-lg me-1"></i>Producto</button>
             </div>
         </div>
         <div id="addCategoryForm" class="d-none"></div>
@@ -1333,203 +1184,106 @@ async function showCatalogo() {
 function showAddCategoryForm() {
     const form = document.getElementById('addCategoryForm');
     form.classList.remove('d-none');
-    form.innerHTML = `
-        <div class="card card-lans mb-3">
-            <div class="card-body">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label small fw-bold">Nombre de la nueva categoria</label>
-                        <input type="text" id="newCatNombre" class="form-control form-control-sm" placeholder="Ej: Reactivos">
-                    </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-success btn-sm w-100" onclick="agregarCategoria()">
-                            <i class="bi bi-folder-plus me-1"></i>Crear Categoria
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
+    form.innerHTML = `<div class="card card-lans mb-3"><div class="card-body"><div class="row g-2 align-items-end">
+        <div class="col-md-8"><label class="form-label small fw-bold">Nombre de la nueva categoria</label><input type="text" id="newCatNombre" class="form-control form-control-sm" placeholder="Ej: Reactivos"></div>
+        <div class="col-md-4"><button class="btn btn-success btn-sm w-100" onclick="agregarCategoria()"><i class="bi bi-folder-plus me-1"></i>Crear</button></div>
+    </div></div></div>`;
 }
 
 async function agregarCategoria() {
     const nombre = document.getElementById('newCatNombre').value.trim();
-    if (!nombre) { showAlert('Ingresa el nombre de la categoria', 'warning'); return; }
-
+    if (!nombre) { showAlert('Ingresa el nombre', 'warning'); return; }
     const existing = await db.collection('lans_productos').where('categoria', '==', nombre).limit(1).get();
-    if (!existing.empty) {
-        showAlert('Esa categoria ya existe', 'warning');
-        return;
-    }
-
-    await db.collection('lans_productos').add({
-        nombre: '(Nueva categoria - agrega productos)',
-        categoria: nombre,
-        unidad: 'Pieza',
-        costo: 0,
-        activo: false
-    });
-    showAlert(`Categoria "${nombre}" creada. Agrega productos a esta categoria.`, 'success');
+    if (!existing.empty) { showAlert('Ya existe', 'warning'); return; }
+    await db.collection('lans_productos').add({ nombre: '(Nueva categoria)', categoria: nombre, unidad: 'Pieza', costo: 0, activo: false });
+    showAlert(`Categoria "${nombre}" creada`, 'success');
     showCatalogo();
 }
 
 async function deleteCategoria(cat) {
-    if (!confirm(`Eliminar la categoria "${cat}" y TODOS sus productos?`)) return;
-
+    if (!confirm(`Eliminar "${cat}" y TODOS sus productos?`)) return;
     const snap = await db.collection('lans_productos').where('categoria', '==', cat).get();
     const batch = db.batch();
     snap.forEach(d => batch.delete(d.ref));
     await batch.commit();
-
-    showAlert(`Categoria "${cat}" eliminada con ${snap.size} productos`, 'warning');
+    showAlert(`Categoria eliminada con ${snap.size} productos`, 'warning');
     showCatalogo();
 }
 
 function showAddProductForm() {
     const form = document.getElementById('addProductForm');
-    const catElements = document.querySelectorAll('.card-header .bi-tag');
     const cats = new Set();
-    catElements.forEach(el => {
-        const text = el.parentElement.textContent.trim().split('\n')[0].trim();
-        if (text) cats.add(text);
+    document.querySelectorAll('.card-header .bi-tag').forEach(el => {
+        const t = el.parentElement.textContent.trim().split('\n')[0].trim();
+        if (t) cats.add(t);
     });
-
     const catList = cats.size > 0 ? [...cats].sort() : Object.keys(PRODUCTOS).sort();
     const options = catList.map(c => `<option value="${c}">${c}</option>`).join('');
-
     form.classList.remove('d-none');
-    form.innerHTML = `
-        <div class="card card-lans mb-3">
-            <div class="card-body">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold">Nombre</label>
-                        <input type="text" id="newProdNombre" class="form-control form-control-sm" placeholder="Ej: Reactivo X">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">Categoria</label>
-                        <select id="newProdCat" class="form-select form-select-sm">${options}</select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small fw-bold">Unidad</label>
-                        <select id="newProdUM" class="form-select form-select-sm">
-                            <option>Pieza</option><option>Caja</option><option>Paquete</option><option>Bolsa</option><option>Par</option>
-                        </select>
-                    </div>
-                    <div class="col-md-1">
-                        <label class="form-label small fw-bold">Costo</label>
-                        <input type="number" id="newProdCosto" class="form-control form-control-sm" placeholder="0.00" step="0.01" min="0">
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-success btn-sm w-100" onclick="agregarProducto()">
-                            <i class="bi bi-plus-lg me-1"></i>Agregar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>`;
+    form.innerHTML = `<div class="card card-lans mb-3"><div class="card-body"><div class="row g-2 align-items-end">
+        <div class="col-md-4"><label class="form-label small fw-bold">Nombre</label><input type="text" id="newProdNombre" class="form-control form-control-sm"></div>
+        <div class="col-md-3"><label class="form-label small fw-bold">Categoria</label><select id="newProdCat" class="form-select form-select-sm">${options}</select></div>
+        <div class="col-md-2"><label class="form-label small fw-bold">Unidad</label><select id="newProdUM" class="form-select form-select-sm"><option>Pieza</option><option>Caja</option><option>Paquete</option><option>Bolsa</option><option>Par</option></select></div>
+        <div class="col-md-1"><label class="form-label small fw-bold">Costo</label><input type="number" id="newProdCosto" class="form-control form-control-sm" step="0.01" min="0"></div>
+        <div class="col-md-2"><button class="btn btn-success btn-sm w-100" onclick="agregarProducto()"><i class="bi bi-plus-lg me-1"></i>Agregar</button></div>
+    </div></div></div>`;
 }
 
 async function agregarProducto() {
     const nombre = document.getElementById('newProdNombre').value.trim();
-    const cat    = document.getElementById('newProdCat').value;
-    const um     = document.getElementById('newProdUM').value;
-    const costo  = parseFloat(document.getElementById('newProdCosto')?.value) || 0;
-
-    if (!nombre) { showAlert('Ingresa el nombre del producto', 'warning'); return; }
-
+    if (!nombre) { showAlert('Ingresa el nombre', 'warning'); return; }
     await db.collection('lans_productos').add({
-        nombre: nombre, categoria: cat, unidad: um, costo: costo, activo: true
+        nombre, categoria: document.getElementById('newProdCat').value,
+        unidad: document.getElementById('newProdUM').value,
+        costo: parseFloat(document.getElementById('newProdCosto')?.value) || 0, activo: true
     });
-    showAlert(`${nombre} agregado al catalogo`, 'success');
+    showAlert(`${nombre} agregado`, 'success');
     showCatalogo();
 }
 
-async function updateCosto(id, valor) {
-    const costo = parseFloat(valor) || 0;
-    await db.collection('lans_productos').doc(id).update({ costo: costo });
-}
-
-async function toggleProducto(id, newState) {
-    await db.collection('lans_productos').doc(id).update({ activo: newState });
-    showCatalogo();
-}
-
-async function deleteProducto(id, nombre) {
-    if (!confirm(`Eliminar "${nombre}" del catalogo?`)) return;
-    await db.collection('lans_productos').doc(id).delete();
-    showAlert(`${nombre} eliminado`, 'warning');
-    showCatalogo();
-}
+async function updateCosto(id, valor) { await db.collection('lans_productos').doc(id).update({ costo: parseFloat(valor) || 0 }); }
+async function toggleProducto(id, s) { await db.collection('lans_productos').doc(id).update({ activo: s }); showCatalogo(); }
+async function deleteProducto(id, n) { if (!confirm(`Eliminar "${n}"?`)) return; await db.collection('lans_productos').doc(id).delete(); showAlert(`${n} eliminado`, 'warning'); showCatalogo(); }
 
 async function exportarCatalogo() {
     const snap = await db.collection('lans_productos').where('activo', '==', true).get();
     const productos = {};
-    snap.forEach(d => {
-        const p = d.data();
-        if (!productos[p.categoria]) productos[p.categoria] = [];
-        productos[p.categoria].push(p);
-    });
-
+    snap.forEach(d => { const p = d.data(); if (!productos[p.categoria]) productos[p.categoria] = []; productos[p.categoria].push(p); });
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Catalogo LANS');
-
-    ws.columns = [
-        { header: 'Categoria', key: 'cat', width: 25 },
-        { header: 'Producto', key: 'prod', width: 35 },
-        { header: 'Unidad', key: 'um', width: 14 },
-        { header: 'Costo Unitario', key: 'costo', width: 16 }
-    ];
-
-    const headerRow = ws.getRow(1);
-    headerRow.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A5276' } };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.border = {
-            top: { style: 'thin', color: { argb: 'FF0E3650' } },
-            bottom: { style: 'thin', color: { argb: 'FF0E3650' } },
-            left: { style: 'thin', color: { argb: 'FF0E3650' } },
-            right: { style: 'thin', color: { argb: 'FF0E3650' } }
-        };
-    });
-    headerRow.height = 22;
-
-    for (const [cat, items] of Object.entries(productos).sort()) {
-        items.forEach(p => {
-            const row = ws.addRow({ cat: cat, prod: p.nombre, um: p.unidad, costo: p.costo || 0 });
-            row.eachCell(cell => {
-                cell.border = {
-                    top: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    left: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    right: { style: 'thin', color: { argb: 'FFD4D4D4' } }
-                };
-            });
-        });
-    }
-
+    ws.columns = [{ header: 'Categoria', key: 'cat', width: 25 }, { header: 'Producto', key: 'prod', width: 35 }, { header: 'Unidad', key: 'um', width: 14 }, { header: 'Costo Unitario', key: 'costo', width: 16 }];
+    const hr = ws.getRow(1);
+    hr.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A5276' } }; cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 }; cell.alignment = { horizontal: 'center', vertical: 'middle' }; });
+    hr.height = 22;
+    for (const [cat, items] of Object.entries(productos).sort()) items.forEach(p => ws.addRow({ cat, prod: p.nombre, um: p.unidad, costo: p.costo || 0 }));
     const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, 'LANS_Catalogo.xlsx');
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'LANS_Catalogo.xlsx');
     showAlert('Catalogo exportado', 'success');
 }
 
 // ═══════════════════════════════
 //  VIEW: Usuarios (Admin)
+//  Muestra usuarios con rolLans, permite dar/quitar acceso LANS
 // ═══════════════════════════════
 
 async function showUsuarios() {
     setActiveNav('showUsuarios');
     const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-success"></div></div>';
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
-    const snap = await db.collection('lans_usuarios').orderBy('nombre').get();
+    const snap = await db.collection('usuarios').orderBy('nombre').get();
+
+    const lansUsers = [];
+    const proesaOnly = [];
+    snap.forEach(d => {
+        const u = { id: d.id, ...d.data() };
+        if (u.rolLans) lansUsers.push(u);
+        else proesaOnly.push(u);
+    });
 
     let cards = '';
-    snap.forEach(d => {
-        const u = d.data();
-        const rolBadge = u.rol === 'admin' ? 'bg-danger' : u.rol === 'lider' ? 'bg-primary' : 'bg-info';
-
+    lansUsers.forEach(u => {
+        const rolBadge = u.rolLans === 'admin' ? 'bg-danger' : u.rolLans === 'lider' ? 'bg-primary' : 'bg-info';
         cards += `
             <div class="col-md-6 col-lg-4 mb-3">
                 <div class="card card-lans user-card h-100">
@@ -1539,27 +1293,68 @@ async function showUsuarios() {
                                 <h6 class="mb-1">${u.nombre}</h6>
                                 <small class="text-muted">${u.usuario || u.email}</small>
                             </div>
-                            <span class="badge ${rolBadge}">${u.rol}</span>
+                            <span class="badge ${rolBadge}">${u.rolLans}</span>
                         </div>
                         <div class="mt-2">
                             <small><i class="bi bi-building me-1"></i>${u.area}</small>
+                            ${u.rol ? `<br><small class="text-muted"><i class="bi bi-briefcase me-1"></i>PROESA: ${u.rol}</small>` : ''}
                         </div>
                     </div>
-                    ${u.rol !== 'admin' ? `
-                    <div class="card-footer bg-white">
-                        <button class="btn btn-outline-danger btn-sm" onclick="deleteUsuario('${d.id}', '${u.nombre}')">
-                            <i class="bi bi-trash me-1"></i>Eliminar
+                    ${u.id !== currentUid ? `
+                    <div class="card-footer bg-white d-flex gap-1">
+                        <select class="form-select form-select-sm" style="width:auto" onchange="cambiarRolLans('${u.id}', this.value)">
+                            <option value="almacen" ${u.rolLans==='almacen'?'selected':''}>Almacen</option>
+                            <option value="lider" ${u.rolLans==='lider'?'selected':''}>Lider</option>
+                            <option value="admin" ${u.rolLans==='admin'?'selected':''}>Admin</option>
+                        </select>
+                        <button class="btn btn-outline-danger btn-sm" onclick="quitarAccesoLans('${u.id}', '${u.nombre}')">
+                            <i class="bi bi-x-lg me-1"></i>Quitar acceso
                         </button>
                     </div>` : ''}
                 </div>
             </div>`;
     });
 
+    // Usuarios PROESA sin acceso LANS
+    let proesaList = '';
+    if (proesaOnly.length > 0) {
+        const rows = proesaOnly.map(u => `
+            <tr>
+                <td>${u.nombre}</td>
+                <td><small class="text-muted">${u.usuario || u.email}</small></td>
+                <td>${u.area}</td>
+                <td>${u.rol}</td>
+                <td>
+                    <select class="form-select form-select-sm" style="width:auto;display:inline" id="rolFor_${u.id}">
+                        <option value="almacen">Almacen</option>
+                        <option value="lider">Lider</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button class="btn btn-success btn-sm ms-1" onclick="darAccesoLans('${u.id}')">
+                        <i class="bi bi-plus-lg me-1"></i>Dar acceso
+                    </button>
+                </td>
+            </tr>`).join('');
+
+        proesaList = `
+            <div class="card card-lans mt-4">
+                <div class="card-header card-header-lans">
+                    <i class="bi bi-people me-2"></i>Usuarios PROESA sin acceso a LANS
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Nombre</th><th>Usuario</th><th>Area</th><th>Rol PROESA</th><th>Accion</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
     const areaOpts = AREAS.map(a => `<option value="${a}">${a}</option>`).join('');
 
     main.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="bi bi-people me-2 text-lans"></i>Usuarios del Sistema</h5>
+            <h5 class="mb-0"><i class="bi bi-people me-2 text-lans"></i>Usuarios LANS</h5>
             <button class="btn btn-lans btn-sm" onclick="toggleUserForm()">
                 <i class="bi bi-person-plus me-1"></i>Nuevo Usuario
             </button>
@@ -1567,92 +1362,80 @@ async function showUsuarios() {
 
         <div id="userFormDiv" class="d-none mb-3">
             <div class="card card-lans">
-                <div class="card-header card-header-lans">
-                    <i class="bi bi-person-plus me-2"></i>Crear Usuario
-                </div>
+                <div class="card-header card-header-lans"><i class="bi bi-person-plus me-2"></i>Crear Nuevo Usuario (solo LANS)</div>
                 <div class="card-body">
+                    <p class="small text-muted mb-2">Para usuarios que ya existen en PROESA, usa la tabla de abajo para darles acceso.</p>
                     <div class="row g-2">
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Nombre completo</label>
-                            <input type="text" id="newUserNombre" class="form-control form-control-sm" placeholder="Maria Garcia">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Usuario</label>
-                            <input type="text" id="newUserUser" class="form-control form-control-sm" placeholder="mgarcia">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Contrasena</label>
-                            <input type="password" id="newUserPass" class="form-control form-control-sm" placeholder="Min 6 chars">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Rol</label>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Nombre completo</label><input type="text" id="newUserNombre" class="form-control form-control-sm"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Usuario</label><input type="text" id="newUserUser" class="form-control form-control-sm"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Contrasena</label><input type="password" id="newUserPass" class="form-control form-control-sm"></div>
+                        <div class="col-md-2"><label class="form-label small fw-bold">Rol LANS</label>
                             <select id="newUserRol" class="form-select form-select-sm">
                                 <option value="almacen">Almacen</option>
-                                <option value="lider">Lider de Area</option>
+                                <option value="lider">Lider</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Area</label>
-                            <select id="newUserArea" class="form-select form-select-sm">${areaOpts}</select>
-                        </div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Area</label><select id="newUserArea" class="form-select form-select-sm">${areaOpts}</select></div>
                     </div>
-                    <button class="btn btn-success btn-sm mt-3" onclick="crearUsuario()">
-                        <i class="bi bi-check-lg me-1"></i>Crear Usuario
-                    </button>
+                    <button class="btn btn-success btn-sm mt-3" onclick="crearUsuario()"><i class="bi bi-check-lg me-1"></i>Crear</button>
                     <button class="btn btn-outline-secondary btn-sm mt-3 ms-2" onclick="toggleUserForm()">Cancelar</button>
                 </div>
             </div>
         </div>
 
-        <div class="row">${cards}</div>`;
+        <div class="row">${cards}</div>
+        ${proesaList}`;
 }
 
 function toggleUserForm() {
     document.getElementById('userFormDiv').classList.toggle('d-none');
 }
 
+async function darAccesoLans(uid) {
+    const rolLans = document.getElementById('rolFor_' + uid).value;
+    await db.collection('usuarios').doc(uid).update({ rolLans: rolLans });
+    showAlert('Acceso LANS otorgado', 'success');
+    showUsuarios();
+}
+
+async function cambiarRolLans(uid, nuevoRol) {
+    await db.collection('usuarios').doc(uid).update({ rolLans: nuevoRol });
+    showAlert('Rol actualizado', 'success');
+}
+
+async function quitarAccesoLans(uid, nombre) {
+    if (!confirm(`Quitar acceso LANS a "${nombre}"?`)) return;
+    await db.collection('usuarios').doc(uid).update({ rolLans: firebase.firestore.FieldValue.delete() });
+    showAlert(`Acceso LANS removido para ${nombre}`, 'warning');
+    showUsuarios();
+}
+
 async function crearUsuario() {
     const nombre = document.getElementById('newUserNombre').value.trim();
     const user   = document.getElementById('newUserUser').value.trim();
     const pass   = document.getElementById('newUserPass').value;
-    const rol    = document.getElementById('newUserRol').value;
+    const rolLans = document.getElementById('newUserRol').value;
     const area   = document.getElementById('newUserArea').value;
 
     if (!nombre || !user || pass.length < 6) {
-        showAlert('Completa todos los campos (contrasena min 6 caracteres)', 'warning');
+        showAlert('Completa todos los campos (contrasena min 6)', 'warning');
         return;
     }
 
     try {
-        const email = `${user}@lans.app`;
+        const email = `${user}@proesa.app`;
         const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
-
-        await db.collection('lans_usuarios').doc(cred.user.uid).set({
-            nombre: nombre,
-            usuario: user,
-            email: email,
-            rol: rol,
-            area: area,
-            activo: true,
+        await db.collection('usuarios').doc(cred.user.uid).set({
+            nombre, usuario: user, email, rolLans, area, activo: true,
             creadoEn: firebase.firestore.FieldValue.serverTimestamp()
         });
-
         await secondaryAuth.signOut();
-
-        showAlert(`Usuario "${nombre}" creado como ${rol}`, 'success');
+        showAlert(`"${nombre}" creado con acceso LANS como ${rolLans}`, 'success');
         showUsuarios();
     } catch (e) {
-        showAlert('Error al crear usuario: ' + e.message, 'danger');
+        showAlert('Error: ' + e.message, 'danger');
     }
-}
-
-async function deleteUsuario(uid, nombre) {
-    if (!confirm(`Eliminar usuario "${nombre}"? El usuario ya no podra acceder al sistema.`)) return;
-
-    await db.collection('lans_usuarios').doc(uid).delete();
-    showAlert(`Usuario ${nombre} eliminado del sistema`, 'warning');
-    showUsuarios();
 }
 
 // ═══════════════════════════════
@@ -1672,6 +1455,6 @@ function badgeEstado(estado) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style');
-    style.textContent = '.text-lans { color: #1b4332 !important; }';
+    style.textContent = '.text-lans { color: #1a5276 !important; }';
     document.head.appendChild(style);
 });

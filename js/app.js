@@ -25,21 +25,83 @@ const secondaryAuth = secondaryApp.auth();
 let currentUser = null;
 let currentUid  = null;
 
-const AREAS = [
-    'Laboratorio',
-    'Almacen',
-    'Administracion',
-    'Recepcion',
-    'Toma de Muestras',
+let AREAS = [
+    'Biologia Molecular',
+    'Logistica',
     'Calidad',
-    'Talento Humano',
-    'Contabilidad',
-    'Finanzas',
-    'Credito y Cobranza',
-    'Abastecimiento y Compras',
-    'Tecnologia de Informacion (TI)',
-    'Business Intelligence (BI)'
+    'Almacen',
+    'Subrogados',
+    'Citometria y Hematologia',
+    'Citologia',
+    'Inmunologia',
+    'Microbiologia',
+    'Neonatologia',
+    'Recepcion de Muestras'
 ];
+
+async function cargarAreas() {
+    try {
+        const doc = await db.collection('lans_config').doc('areas').get();
+        if (doc.exists && doc.data().lista && doc.data().lista.length > 0) {
+            AREAS = doc.data().lista.sort();
+        } else {
+            await db.collection('lans_config').doc('areas').set({ lista: AREAS.sort() });
+        }
+    } catch (e) {}
+}
+
+async function showAreas() {
+    setActiveNav('showAreas');
+    const main = document.getElementById('mainContent');
+    await cargarAreas();
+    const rows = AREAS.map(a => `
+        <tr>
+            <td>${a}</td>
+            <td class="text-end" style="width:80px">
+                <button class="btn btn-outline-danger btn-sm" onclick="eliminarArea('${a}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>`).join('');
+    main.innerHTML = `
+        <div class="card card-lans">
+            <div class="card-header card-header-lans d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-diagram-3 me-2"></i>Areas (${AREAS.length})</span>
+            </div>
+            <div class="card-body">
+                <div class="input-group mb-3" style="max-width:400px">
+                    <input type="text" id="nuevaArea" class="form-control" placeholder="Nueva area...">
+                    <button class="btn btn-lans" onclick="agregarArea()">
+                        <i class="bi bi-plus-lg me-1"></i>Agregar
+                    </button>
+                </div>
+                <table class="table table-lans table-hover mb-0">
+                    <thead><tr><th>Area</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+async function agregarArea() {
+    const input = document.getElementById('nuevaArea');
+    const nombre = input.value.trim();
+    if (!nombre) return;
+    if (AREAS.includes(nombre)) { showAlert('Esa area ya existe', 'warning'); return; }
+    AREAS.push(nombre);
+    AREAS.sort();
+    await db.collection('lans_config').doc('areas').set({ lista: AREAS });
+    showAlert(`Area "${nombre}" agregada`, 'success');
+    showAreas();
+}
+
+async function eliminarArea(nombre) {
+    if (!confirm(`Eliminar el area "${nombre}"?`)) return;
+    AREAS = AREAS.filter(a => a !== nombre);
+    await db.collection('lans_config').doc('areas').set({ lista: AREAS });
+    showAlert(`Area "${nombre}" eliminada`, 'warning');
+    showAreas();
+}
 
 const PRODUCTOS = {
     'Carpetas y Archivadores': [
@@ -197,9 +259,10 @@ function showLogin() {
     document.getElementById('loginBtn').textContent = 'Iniciar Sesion';
 }
 
-function showApp() {
+async function showApp() {
     document.getElementById('loginView').style.display = 'none';
     document.getElementById('appView').style.display   = '';
+    await cargarAreas();
     renderNav();
     const role = currentUser.rolLans;
     if (role === 'admin') showAdminPedidos();
@@ -305,6 +368,7 @@ function renderNav() {
         links += navLink('showExportar', 'bi-file-earmark-excel', 'Exportar');
         links += navLink('showHistorial', 'bi-bar-chart-line', 'Historial');
         links += navLink('showCatalogo', 'bi-box-seam', 'Catalogo');
+        links += navLink('showAreas', 'bi-diagram-3', 'Areas');
         links += navLink('showUsuarios', 'bi-people', 'Usuarios');
     }
 

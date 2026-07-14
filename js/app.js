@@ -749,7 +749,6 @@ async function showMisEntregas(filtroArea, fechaDesde, fechaHasta) {
 let _entregasFiltroArea = 'todas';
 let _entregasFechaDesde = '';
 let _entregasFechaHasta = '';
-let _entregasBusqueda = '';
 
 async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
     _entregasFiltroArea = filtroArea || _entregasFiltroArea || 'todas';
@@ -784,16 +783,6 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
         entregas = entregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
     }
 
-    if (_entregasBusqueda) {
-        const q = _entregasBusqueda.toLowerCase();
-        entregas = entregas.filter(e =>
-            (e.nombreEmpleado || '').toLowerCase().includes(q) ||
-            (e.area || '').toLowerCase().includes(q) ||
-            e.id.slice(-5).toUpperCase().includes(q.toUpperCase()) ||
-            (e.detalles || []).some(i => i.nombre.toLowerCase().includes(q))
-        );
-    }
-
     entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
     const areaOpts = ['todas', ...AREAS];
@@ -804,7 +793,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                     <div class="col-md-3">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-search me-1"></i>Buscar</label>
                         <input type="text" class="form-control form-control-sm" placeholder="Nombre, producto, area..."
-                               value="${_entregasBusqueda}" oninput="_entregasBusqueda=this.value;showEntregas()">
+                               id="entregasBusqueda" oninput="filtrarEntregasTabla(this.value)">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1"></i>Area</label>
@@ -836,7 +825,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                         <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()" title="Seleccionar todos">
                             <i class="bi bi-check2-all"></i>
                         </button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';_entregasBusqueda='';showEntregas('todas','','')" title="Limpiar filtros">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';showEntregas('todas','','')" title="Limpiar filtros">
                             <i class="bi bi-x-circle"></i>
                         </button>
                     </div>
@@ -888,7 +877,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
         ${filtros}
         <div class="card card-lans">
             <div class="table-responsive">
-                <table class="table table-lans table-hover mb-0">
+                <table class="table table-lans table-hover mb-0" id="tablaEntregas">
                     <thead><tr>
                         <th class="text-center"><input type="checkbox" class="form-check-input" onchange="toggleAllExport(this.checked)"></th>
                         <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th>
@@ -937,6 +926,14 @@ async function verDetalle(entregaId) {
     const m = new bootstrap.Modal(document.getElementById('detalleModal'));
     m.show();
     document.getElementById('detalleModal').addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+function filtrarEntregasTabla(q) {
+    const query = q.toLowerCase();
+    document.querySelectorAll('#tablaEntregas tbody tr').forEach(row => {
+        const texto = row.textContent.toLowerCase();
+        row.style.display = texto.includes(query) ? '' : 'none';
+    });
 }
 
 async function archivarEntrega(entregaId) {

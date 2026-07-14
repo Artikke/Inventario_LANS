@@ -355,12 +355,12 @@ function renderNav() {
 
     links += navLink('showRegistrarEntrega', 'bi-box-arrow-in-down', 'Registrar Entrega');
     links += navLink('showMisEntregas', 'bi-list-check', 'Mis Entregas');
+    links += navLink('showCatalogo', 'bi-box-seam', 'Catalogo');
 
     if (role === 'admin') {
         links += navLink('showEntregas', 'bi-clipboard-data', 'Entregas');
         links += navLink('showExportar', 'bi-file-earmark-excel', 'Exportar');
         links += navLink('showHistorial', 'bi-bar-chart-line', 'Historial');
-        links += navLink('showCatalogo', 'bi-box-seam', 'Catalogo');
         links += navLink('showAreas', 'bi-diagram-3', 'Areas');
         links += navLink('showUsuarios', 'bi-people', 'Usuarios');
     }
@@ -1109,11 +1109,13 @@ async function showCatalogo() {
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
+    const isAdmin = currentUser.rolLans === 'admin';
     const snap = await db.collection('lans_productos').get();
     const productos = {};
     const categorias = new Set();
     snap.forEach(d => {
         const p = { id: d.id, ...d.data() };
+        if (!isAdmin && !p.activo) return;
         categorias.add(p.categoria);
         if (!productos[p.categoria]) productos[p.categoria] = [];
         productos[p.categoria].push(p);
@@ -1122,44 +1124,67 @@ async function showCatalogo() {
     let tables = '';
     for (const cat of [...categorias].sort()) {
         const items = productos[cat] || [];
-        const rows = items.map(p => `
-            <tr class="${!p.activo ? 'table-secondary text-muted' : ''}">
-                <td>${p.nombre}</td>
-                <td class="text-center">${p.unidad}</td>
-                <td class="text-center">
-                    <input type="number" class="form-control form-control-sm" style="width:90px;display:inline"
-                           value="${p.costo || 0}" step="0.01" min="0" onchange="updateCosto('${p.id}', this.value)">
-                </td>
-                <td class="text-center"><span class="badge ${p.activo ? 'bg-success' : 'bg-secondary'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-outline-${p.activo ? 'warning' : 'success'}" onclick="toggleProducto('${p.id}', ${!p.activo})"><i class="bi bi-${p.activo ? 'pause' : 'play'}"></i></button>
-                    <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProducto('${p.id}', '${p.nombre.replace(/'/g, "\\'")}')"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>`).join('');
+        const rows = items.map(p => {
+            if (isAdmin) {
+                return `
+                    <tr class="${!p.activo ? 'table-secondary text-muted' : ''}">
+                        <td>${p.nombre}</td>
+                        <td class="text-center">${p.unidad}</td>
+                        <td class="text-center">
+                            <input type="number" class="form-control form-control-sm" style="width:90px;display:inline"
+                                   value="${p.costo || 0}" step="0.01" min="0" onchange="updateCosto('${p.id}', this.value)">
+                        </td>
+                        <td class="text-center"><span class="badge ${p.activo ? 'bg-success' : 'bg-secondary'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-${p.activo ? 'warning' : 'success'}" onclick="toggleProducto('${p.id}', ${!p.activo})"><i class="bi bi-${p.activo ? 'pause' : 'play'}"></i></button>
+                            <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProducto('${p.id}', '${p.nombre.replace(/'/g, "\\'")}')"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>`;
+            } else {
+                return `
+                    <tr>
+                        <td>${p.nombre}</td>
+                        <td class="text-center">${p.unidad}</td>
+                    </tr>`;
+            }
+        }).join('');
+
+        const adminHeader = isAdmin
+            ? `<div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-tag me-2 text-lans"></i>${cat}<span class="badge bg-secondary ms-1">${items.length}</span></span>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteCategoria('${cat}')"><i class="bi bi-trash me-1"></i>Eliminar</button>
+                </div>`
+            : `<div class="card-header bg-white fw-bold">
+                    <i class="bi bi-tag me-2 text-lans"></i>${cat}<span class="badge bg-secondary ms-1">${items.length}</span>
+                </div>`;
+
+        const thead = isAdmin
+            ? '<thead><tr><th>Producto</th><th class="text-center">Unidad</th><th class="text-center">Costo Unit.</th><th class="text-center">Estado</th><th class="text-center">Acciones</th></tr></thead>'
+            : '<thead><tr><th>Producto</th><th class="text-center">Unidad</th></tr></thead>';
 
         tables += `
             <div class="card card-lans mb-3">
-                <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-tag me-2 text-lans"></i>${cat}<span class="badge bg-secondary ms-1">${items.length}</span></span>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteCategoria('${cat}')"><i class="bi bi-trash me-1"></i>Eliminar</button>
-                </div>
+                ${adminHeader}
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Producto</th><th class="text-center">Unidad</th><th class="text-center">Costo Unit.</th><th class="text-center">Estado</th><th class="text-center">Acciones</th></tr></thead>
+                        ${thead}
                         <tbody>${rows}</tbody>
                     </table>
                 </div>
             </div>`;
     }
 
-    main.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="bi bi-box-seam me-2 text-lans"></i>Catalogo de Productos</h5>
+    const adminButtons = isAdmin ? `
             <div class="d-flex gap-2">
                 <button class="btn btn-outline-lans btn-sm" onclick="exportarCatalogo()"><i class="bi bi-file-earmark-excel me-1"></i>Exportar</button>
                 <button class="btn btn-success btn-sm" onclick="showAddCategoryForm()"><i class="bi bi-folder-plus me-1"></i>Categoria</button>
                 <button class="btn btn-lans btn-sm" onclick="showAddProductForm()"><i class="bi bi-plus-lg me-1"></i>Producto</button>
-            </div>
+            </div>` : '';
+
+    main.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-box-seam me-2 text-lans"></i>Catalogo de Productos</h5>
+            ${adminButtons}
         </div>
         <div id="addCategoryForm" class="d-none"></div>
         <div id="addProductForm" class="d-none"></div>

@@ -958,6 +958,17 @@ async function desarchivarEntrega(entregaId) {
     }
 }
 
+async function eliminarEntrega(entregaId) {
+    if (!confirm('ELIMINAR PERMANENTEMENTE esta entrega? Esta accion no se puede deshacer.')) return;
+    try {
+        await db.collection('lans_pedidos').doc(entregaId).delete();
+        showAlert('Entrega eliminada permanentemente', 'warning');
+        showArchivo();
+    } catch (e) {
+        showAlert('Error: ' + e.message, 'danger');
+    }
+}
+
 // ═══════════════════════════════
 //  Excel Export + Helpers
 // ═══════════════════════════════
@@ -1202,8 +1213,11 @@ async function showArchivo(filtroArea, fechaDesde, fechaHasta) {
                     <button class="btn btn-outline-info btn-sm me-1" onclick="verDetalle('${p.id}')" title="Ver detalle">
                         <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="desarchivarEntrega('${p.id}')" title="Desarchivar">
+                    <button class="btn btn-outline-warning btn-sm me-1" onclick="desarchivarEntrega('${p.id}')" title="Desarchivar">
                         <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="eliminarEntrega('${p.id}')" title="Eliminar permanente">
+                        <i class="bi bi-trash"></i>
                     </button>
                 </td>
             </tr>`;

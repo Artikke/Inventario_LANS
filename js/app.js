@@ -1,4 +1,5 @@
-/* LANS - Sistema de Inventario (GitHub Pages + Firebase)
+/* LANS - Registro de Entregas (GitHub Pages + Firebase)
+   Almacen registra entregas a areas, Admin ve historial.
    Comparte usuarios con PROESA — usa campo rolLans */
 
 const firebaseConfig = {
@@ -58,7 +59,7 @@ async function showAreas() {
         <tr>
             <td>${a}</td>
             <td class="text-end" style="width:80px">
-                <button class="btn btn-outline-danger btn-sm" onclick="eliminarArea('${a}')">
+                <button class="btn btn-outline-danger btn-sm" onclick="eliminarArea('${a.replace(/'/g, "\\'")}')">
                     <i class="bi bi-trash"></i>
                 </button>
             </td>
@@ -265,10 +266,8 @@ async function showApp() {
     await cargarAreas();
     renderNav();
     const role = currentUser.rolLans;
-    if (role === 'admin') showAdminPedidos();
-    else if (role === 'lider') showAprobar();
-    else if (role === 'almacen') showMovimientos();
-    else showNuevoPedido();
+    if (role === 'admin') showEntregas();
+    else showRegistrarEntrega();
 }
 
 function showNoAccess() {
@@ -354,17 +353,11 @@ function renderNav() {
     const role = currentUser.rolLans;
     let links = '';
 
-    links += navLink('showNuevoPedido', 'bi-cart-plus', 'Nuevo Pedido');
-    links += navLink('showMisPedidos', 'bi-list-check', 'Mis Pedidos');
+    links += navLink('showRegistrarEntrega', 'bi-box-arrow-in-down', 'Registrar Entrega');
+    links += navLink('showMisEntregas', 'bi-list-check', 'Mis Entregas');
 
-    if (role === 'lider') {
-        links += navLink('showAprobar', 'bi-check2-square', 'Aprobar');
-    }
-    if (role === 'almacen') {
-        links += navLink('showMovimientos', 'bi-eye', 'Movimientos');
-    }
     if (role === 'admin') {
-        links += navLink('showAdminPedidos', 'bi-clipboard-data', 'Pedidos');
+        links += navLink('showEntregas', 'bi-clipboard-data', 'Entregas');
         links += navLink('showExportar', 'bi-file-earmark-excel', 'Exportar');
         links += navLink('showHistorial', 'bi-bar-chart-line', 'Historial');
         links += navLink('showCatalogo', 'bi-box-seam', 'Catalogo');
@@ -422,11 +415,11 @@ function showAlert(msg, type = 'info') {
 }
 
 // ═══════════════════════════════
-//  VIEW: Nuevo Pedido
+//  VIEW: Registrar Entrega
 // ═══════════════════════════════
 
-async function showNuevoPedido() {
-    setActiveNav('showNuevoPedido');
+async function showRegistrarEntrega() {
+    setActiveNav('showRegistrarEntrega');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
@@ -479,14 +472,23 @@ async function showNuevoPedido() {
         idx++;
     }
 
+    const areaOpts = AREAS.map(a => `<option value="${a}">${a}</option>`).join('');
+
     main.innerHTML = `
         <div class="row">
             <div class="col-lg-8">
                 <div class="card card-lans mb-3">
                     <div class="card-header card-header-lans">
-                        <i class="bi bi-cart-plus me-2"></i>Nuevo Pedido de Material
+                        <i class="bi bi-box-arrow-in-down me-2"></i>Registrar Entrega de Material
                     </div>
                     <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold"><i class="bi bi-building me-1"></i>Area que recibe</label>
+                            <select id="areaEntrega" class="form-select">
+                                <option value="">-- Selecciona el area --</option>
+                                ${areaOpts}
+                            </select>
+                        </div>
                         <div class="search-box mb-3">
                             <i class="bi bi-search"></i>
                             <input type="text" class="form-control" placeholder="Buscar producto..."
@@ -500,19 +502,35 @@ async function showNuevoPedido() {
             </div>
             <div class="col-lg-4">
                 <div class="order-summary" id="orderSummary">
-                    <h6><i class="bi bi-receipt me-2"></i>Resumen del Pedido</h6>
+                    <h6><i class="bi bi-receipt me-2"></i>Resumen de Entrega</h6>
+                    <div id="summaryArea" class="mb-2"><small class="text-muted">Selecciona un area...</small></div>
+                    <hr>
                     <div id="summaryItems"><p class="text-muted small">Agrega productos...</p></div>
                     <hr>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Observaciones (opcional)</label>
+                        <textarea id="entregaObs" class="form-control form-control-sm" rows="2"
+                                  placeholder="Notas adicionales..."></textarea>
+                    </div>
                     <div class="d-flex justify-content-between fw-bold">
                         <span>Total de articulos:</span>
                         <span id="summaryTotal">0</span>
                     </div>
-                    <button class="btn btn-lans w-100 mt-3" onclick="submitPedido()" id="btnSubmit">
-                        <i class="bi bi-send me-2"></i>Enviar Pedido
+                    <button class="btn btn-lans w-100 mt-3" onclick="submitEntrega()" id="btnSubmit">
+                        <i class="bi bi-check-circle me-2"></i>Registrar Entrega
                     </button>
                 </div>
             </div>
         </div>`;
+
+    document.getElementById('areaEntrega').addEventListener('change', function() {
+        const areaDiv = document.getElementById('summaryArea');
+        if (this.value) {
+            areaDiv.innerHTML = `<span class="badge bg-primary"><i class="bi bi-building me-1"></i>${this.value}</span>`;
+        } else {
+            areaDiv.innerHTML = '<small class="text-muted">Selecciona un area...</small>';
+        }
+    });
 }
 
 function filterProducts(query) {
@@ -545,7 +563,13 @@ function updateSummary() {
     document.getElementById('summaryTotal').textContent = total;
 }
 
-async function submitPedido() {
+async function submitEntrega() {
+    const area = document.getElementById('areaEntrega').value;
+    if (!area) {
+        showAlert('Selecciona el area que recibe la entrega', 'warning');
+        return;
+    }
+
     const detalles = [];
     document.querySelectorAll('.qty-input').forEach(inp => {
         const qty = parseInt(inp.value) || 0;
@@ -566,40 +590,34 @@ async function submitPedido() {
 
     const btn = document.getElementById('btnSubmit');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Registrando...';
 
     try {
-        const role = currentUser.rolLans;
-        const saltaLider = role === 'admin' || role === 'lider';
+        const obs = document.getElementById('entregaObs').value.trim();
         await db.collection('lans_pedidos').add({
             uid: currentUid,
             nombreEmpleado: currentUser.nombre,
-            area: currentUser.area,
-            rolLans: role,
+            area: area,
             detalles: detalles,
-            estado: saltaLider ? 'aprobado_lider' : 'pendiente',
+            estado: 'entregado',
             fecha: firebase.firestore.FieldValue.serverTimestamp(),
-            aprobadoPorLider: saltaLider ? currentUid : null,
-            aprobadoPorAdmin: null,
-            nombreLider: saltaLider ? currentUser.nombre : null,
-            nombreAdmin: null,
-            noInventario: null
+            observaciones: obs || null
         });
-        showAlert('Pedido enviado correctamente', 'success');
-        showMisPedidos();
+        showAlert(`Entrega registrada para ${area}`, 'success');
+        showMisEntregas();
     } catch (e) {
-        showAlert('Error al enviar: ' + e.message, 'danger');
+        showAlert('Error al registrar: ' + e.message, 'danger');
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-send me-2"></i>Enviar Pedido';
+        btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Registrar Entrega';
     }
 }
 
 // ═══════════════════════════════
-//  VIEW: Mis Pedidos
+//  VIEW: Mis Entregas
 // ═══════════════════════════════
 
-async function showMisPedidos() {
-    setActiveNav('showMisPedidos');
+async function showMisEntregas() {
+    setActiveNav('showMisEntregas');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
@@ -607,26 +625,26 @@ async function showMisPedidos() {
     try {
         snap = await db.collection('lans_pedidos').where('uid', '==', currentUid).get();
     } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar pedidos: ${e.message}</div>`;
+        main.innerHTML = `<div class="alert alert-danger">Error al cargar entregas: ${e.message}</div>`;
         return;
     }
 
     if (snap.empty) {
         main.innerHTML = `<div class="empty-state">
-            <i class="bi bi-inbox"></i><h5>No tienes pedidos</h5>
-            <p>Crea tu primer pedido de material</p>
-            <button class="btn btn-lans" onclick="showNuevoPedido()">
-                <i class="bi bi-cart-plus me-2"></i>Nuevo Pedido
+            <i class="bi bi-inbox"></i><h5>No tienes entregas registradas</h5>
+            <p>Registra tu primera entrega de material</p>
+            <button class="btn btn-lans" onclick="showRegistrarEntrega()">
+                <i class="bi bi-box-arrow-in-down me-2"></i>Registrar Entrega
             </button></div>`;
         return;
     }
 
-    const pedidos = [];
-    snap.forEach(d => pedidos.push({ id: d.id, ...d.data() }));
-    pedidos.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+    const entregas = [];
+    snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
+    entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
     let cards = '';
-    pedidos.forEach(p => {
+    entregas.forEach(p => {
         const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : 'Pendiente';
         const items = (p.detalles || []).map(i =>
             `<li class="list-group-item d-flex justify-content-between py-1 px-2">
@@ -639,8 +657,15 @@ async function showMisPedidos() {
             <div class="col-md-6 col-lg-4 mb-3">
                 <div class="card card-lans h-100">
                     <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom">
-                        <strong>Pedido #${p.id.slice(-5).toUpperCase()}</strong>
-                        ${badgeEstado(p.estado)}
+                        <strong>#${p.id.slice(-5).toUpperCase()}</strong>
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Entregado</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="bi bi-building me-1"></i>Area:</small>
+                            <span class="badge bg-primary ms-1">${p.area}</span>
+                        </div>
+                        ${p.observaciones ? `<div class="mb-2"><small class="text-muted"><i class="bi bi-chat-text me-1"></i>${p.observaciones}</small></div>` : ''}
                     </div>
                     <div class="card-body p-0">
                         <ul class="list-group list-group-flush">${items}</ul>
@@ -654,310 +679,148 @@ async function showMisPedidos() {
 
     main.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="bi bi-list-check me-2 text-lans"></i>Mis Pedidos</h5>
-            <button class="btn btn-lans btn-sm" onclick="showNuevoPedido()">
-                <i class="bi bi-plus-lg me-1"></i>Nuevo
+            <h5 class="mb-0"><i class="bi bi-list-check me-2 text-lans"></i>Mis Entregas</h5>
+            <button class="btn btn-lans btn-sm" onclick="showRegistrarEntrega()">
+                <i class="bi bi-plus-lg me-1"></i>Nueva
             </button>
         </div>
         <div class="row">${cards}</div>`;
 }
 
 // ═══════════════════════════════
-//  VIEW: Aprobar (Lider)
+//  VIEW: Entregas (Admin - todas)
 // ═══════════════════════════════
 
-async function showAprobar() {
-    setActiveNav('showAprobar');
+async function showEntregas(filtroArea) {
+    filtroArea = filtroArea || 'todas';
+    setActiveNav('showEntregas');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
-        snap = await db.collection('lans_pedidos')
-            .where('area', '==', currentUser.area)
-            .where('estado', '==', 'pendiente')
-            .get();
+        if (filtroArea === 'todas') {
+            snap = await db.collection('lans_pedidos').get();
+        } else {
+            snap = await db.collection('lans_pedidos').where('area', '==', filtroArea).get();
+        }
     } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
+        main.innerHTML = `<div class="alert alert-danger">Error al cargar entregas: ${e.message}</div>`;
         return;
     }
 
-    if (snap.empty) {
-        main.innerHTML = `<div class="empty-state">
-            <i class="bi bi-check-circle"></i>
-            <h5>Sin pedidos pendientes</h5>
-            <p>No hay pedidos por aprobar en tu area</p></div>`;
+    const entregas = [];
+    snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
+    entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+
+    const areaOpts = ['todas', ...AREAS];
+    const filterBtns = `
+        <select class="form-select form-select-sm" style="width:auto" onchange="showEntregas(this.value)">
+            ${areaOpts.map(a => `<option value="${a}" ${a === filtroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
+        </select>`;
+
+    if (entregas.length === 0) {
+        main.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas</h5>
+                <div class="d-flex gap-2 align-items-center">${filterBtns}</div>
+            </div>
+            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin entregas</h5></div>`;
         return;
     }
 
-    const pedidosAprobar = [];
-    snap.forEach(d => pedidosAprobar.push({ id: d.id, ...d.data() }));
-    pedidosAprobar.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-
-    let cards = '';
-    pedidosAprobar.forEach(p => {
+    let rows = '';
+    entregas.forEach(p => {
         const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
-        const items = (p.detalles || []).map(i =>
-            `<tr><td>${i.nombre}</td><td class="text-center">${i.unidad}</td><td class="text-center">${i.cantidad}</td></tr>`
-        ).join('');
+        const hora = p.fecha ? p.fecha.toDate().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
+        const totalItems = (p.detalles || []).reduce((s, i) => s + i.cantidad, 0);
+        const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
 
-        cards += `
-            <div class="col-lg-6 mb-3">
-                <div class="card card-lans">
-                    <div class="card-header card-header-lans d-flex justify-content-between">
-                        <span><i class="bi bi-person me-1"></i>${p.nombreEmpleado}</span>
-                        <small>${fecha}</small>
+        rows += `
+            <tr>
+                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
+                <td>${p.nombreEmpleado}</td>
+                <td><span class="badge bg-primary">${p.area}</span></td>
+                <td><small>${itemsList}</small></td>
+                <td class="text-center">${totalItems}</td>
+                <td>${fecha} <small class="text-muted">${hora}</small></td>
+                <td class="text-center">
+                    <button class="btn btn-outline-info btn-sm me-1" onclick="verDetalle('${p.id}')" title="Ver detalle">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="eliminarEntrega('${p.id}')" title="Eliminar">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+    });
+
+    main.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas <span class="badge bg-secondary ms-1">${entregas.length}</span></h5>
+            <div class="d-flex gap-2 align-items-center">${filterBtns}</div>
+        </div>
+        <div class="card card-lans">
+            <div class="table-responsive">
+                <table class="table table-lans table-hover mb-0">
+                    <thead><tr>
+                        <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th>
+                        <th class="text-center">Cant.</th><th>Fecha</th><th class="text-center">Acciones</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+async function verDetalle(entregaId) {
+    const doc = await db.collection('lans_pedidos').doc(entregaId).get();
+    if (!doc.exists) { showAlert('Entrega no encontrada', 'warning'); return; }
+    const p = { id: doc.id, ...doc.data() };
+    const fecha = p.fecha ? p.fecha.toDate().toLocaleString('es-MX') : '';
+    const items = (p.detalles || []).map(i =>
+        `<tr><td>${i.nombre}</td><td class="text-center">${i.unidad}</td><td class="text-center">${i.cantidad}</td></tr>`
+    ).join('');
+
+    const modal = document.createElement('div');
+    modal.innerHTML = `
+        <div class="modal fade" id="detalleModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header" style="background:var(--lans-blue);color:white">
+                        <h5 class="modal-title"><i class="bi bi-receipt me-2"></i>Entrega #${p.id.slice(-5).toUpperCase()}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="card-body p-0">
-                        <table class="table table-sm mb-0">
-                            <thead><tr><th>Producto</th><th class="text-center">UM</th><th class="text-center">Cant.</th></tr></thead>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-6"><strong>Registrado por:</strong><br>${p.nombreEmpleado}</div>
+                            <div class="col-6"><strong>Area:</strong><br><span class="badge bg-primary">${p.area}</span></div>
+                        </div>
+                        <div class="mb-3"><strong>Fecha:</strong> ${fecha}</div>
+                        ${p.observaciones ? `<div class="mb-3"><strong>Observaciones:</strong><br><span class="text-muted">${p.observaciones}</span></div>` : ''}
+                        <table class="table table-sm">
+                            <thead><tr><th>Producto</th><th class="text-center">Unidad</th><th class="text-center">Cantidad</th></tr></thead>
                             <tbody>${items}</tbody>
                         </table>
                     </div>
-                    <div class="card-footer bg-white d-flex gap-2">
-                        <button class="btn btn-success btn-sm flex-fill" onclick="aprobarPedido('${p.id}','aprobado_lider')">
-                            <i class="bi bi-check-lg me-1"></i>Aprobar
-                        </button>
-                        <button class="btn btn-danger btn-sm flex-fill" onclick="aprobarPedido('${p.id}','rechazado')">
-                            <i class="bi bi-x-lg me-1"></i>Rechazar
-                        </button>
-                    </div>
                 </div>
-            </div>`;
-    });
-
-    main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-check2-square me-2 text-lans"></i>Pedidos por Aprobar - ${currentUser.area}</h5>
-        <div class="row">${cards}</div>`;
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    const m = new bootstrap.Modal(document.getElementById('detalleModal'));
+    m.show();
+    document.getElementById('detalleModal').addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
-async function aprobarPedido(pedidoId, nuevoEstado) {
+async function eliminarEntrega(entregaId) {
+    if (!confirm('Eliminar esta entrega? Esta accion no se puede deshacer.')) return;
     try {
-        const role = currentUser.rolLans;
-        const updates = { estado: nuevoEstado };
-        if (nuevoEstado === 'aprobado_lider') {
-            updates.aprobadoPorLider = currentUid;
-            updates.nombreLider = currentUser.nombre;
-            updates.fechaAprobacionLider = firebase.firestore.FieldValue.serverTimestamp();
-        } else if (nuevoEstado === 'aprobado') {
-            updates.aprobadoPorAdmin = currentUid;
-            updates.nombreAdmin = currentUser.nombre;
-            updates.fechaAprobacionAdmin = firebase.firestore.FieldValue.serverTimestamp();
-        } else if (nuevoEstado === 'rechazado') {
-            if (role === 'lider') {
-                updates.aprobadoPorLider = currentUid;
-                updates.nombreLider = currentUser.nombre;
-            } else {
-                updates.aprobadoPorAdmin = currentUid;
-                updates.nombreAdmin = currentUser.nombre;
-            }
-        }
-
-        await db.collection('lans_pedidos').doc(pedidoId).update(updates);
-        showAlert(nuevoEstado === 'rechazado' ? 'Pedido rechazado' : 'Pedido actualizado', nuevoEstado === 'rechazado' ? 'warning' : 'success');
-
-        if (role === 'lider') showAprobar();
-        else showAdminPedidos();
+        await db.collection('lans_pedidos').doc(entregaId).delete();
+        showAlert('Entrega eliminada', 'warning');
+        showEntregas();
     } catch (e) {
         showAlert('Error: ' + e.message, 'danger');
     }
-}
-
-async function eliminarPedido(pedidoId) {
-    if (!confirm('Eliminar este pedido? Esta accion no se puede deshacer.')) return;
-    try {
-        await db.collection('lans_pedidos').doc(pedidoId).delete();
-        showAlert('Pedido eliminado', 'warning');
-        showAdminPedidos();
-    } catch (e) {
-        showAlert('Error: ' + e.message, 'danger');
-    }
-}
-
-// ═══════════════════════════════
-//  VIEW: Movimientos (Almacen - solo lectura, sin costos)
-// ═══════════════════════════════
-
-async function showMovimientos(filtro) {
-    filtro = filtro || 'todos';
-    setActiveNav('showMovimientos');
-    const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
-
-    let snap;
-    try {
-        if (filtro === 'todos') {
-            snap = await db.collection('lans_pedidos').get();
-        } else {
-            snap = await db.collection('lans_pedidos').where('estado', '==', filtro).get();
-        }
-    } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
-        return;
-    }
-
-    const pedidos = [];
-    snap.forEach(d => pedidos.push({ id: d.id, ...d.data() }));
-    pedidos.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-
-    const filters = [
-        { key: 'todos', label: 'Todos', icon: 'bi-grid' },
-        { key: 'pendiente', label: 'Pendientes', icon: 'bi-hourglass-split' },
-        { key: 'aprobado_lider', label: 'Aprobado Lider', icon: 'bi-person-check' },
-        { key: 'aprobado', label: 'Aprobados', icon: 'bi-check-circle' },
-        { key: 'rechazado', label: 'Rechazados', icon: 'bi-x-circle' }
-    ];
-
-    const filterBtns = filters.map(f =>
-        `<button class="btn btn-sm ${f.key === filtro ? 'btn-lans' : 'btn-outline-secondary'}"
-                 onclick="showMovimientos('${f.key}')">
-            <i class="bi ${f.icon} me-1"></i>${f.label}
-        </button>`
-    ).join('');
-
-    if (pedidos.length === 0) {
-        main.innerHTML = `
-            <h5 class="mb-3"><i class="bi bi-eye me-2 text-lans"></i>Movimientos</h5>
-            <div class="filter-tabs d-flex flex-wrap gap-2 mb-3">${filterBtns}</div>
-            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin movimientos</h5></div>`;
-        return;
-    }
-
-    let rows = '';
-    pedidos.forEach(p => {
-        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
-        const totalItems = (p.detalles || []).reduce((s, i) => s + i.cantidad, 0);
-        const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
-
-        rows += `
-            <tr>
-                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
-                <td>${p.nombreEmpleado}</td>
-                <td>${p.area}</td>
-                <td><small>${itemsList}</small></td>
-                <td class="text-center">${totalItems}</td>
-                <td class="text-center">${badgeEstado(p.estado)}</td>
-                <td>${fecha}</td>
-            </tr>`;
-    });
-
-    main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-eye me-2 text-lans"></i>Movimientos</h5>
-        <div class="filter-tabs d-flex flex-wrap gap-2 mb-3">${filterBtns}</div>
-        <div class="card card-lans">
-            <div class="table-responsive">
-                <table class="table table-lans table-hover mb-0">
-                    <thead><tr>
-                        <th>ID</th><th>Solicitante</th><th>Area</th><th>Productos</th>
-                        <th class="text-center">Cant.</th><th class="text-center">Estado</th>
-                        <th>Fecha</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        </div>`;
-}
-
-// ═══════════════════════════════
-//  VIEW: Admin Pedidos
-// ═══════════════════════════════
-
-async function showAdminPedidos(filtro) {
-    filtro = filtro || 'por_aprobar';
-    setActiveNav('showAdminPedidos');
-    const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
-
-    let snap;
-    try {
-        if (filtro === 'por_aprobar') {
-            snap = await db.collection('lans_pedidos')
-                .where('estado', 'in', ['pendiente', 'aprobado_lider']).get();
-        } else if (filtro === 'todos') {
-            snap = await db.collection('lans_pedidos').get();
-        } else {
-            snap = await db.collection('lans_pedidos').where('estado', '==', filtro).get();
-        }
-    } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar pedidos: ${e.message}</div>`;
-        return;
-    }
-
-    const adminPedidos = [];
-    snap.forEach(d => adminPedidos.push({ id: d.id, ...d.data() }));
-    adminPedidos.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-
-    const filters = [
-        { key: 'por_aprobar', label: 'Por Aprobar', icon: 'bi-hourglass-split' },
-        { key: 'aprobado', label: 'Aprobados', icon: 'bi-check-circle' },
-        { key: 'rechazado', label: 'Rechazados', icon: 'bi-x-circle' },
-        { key: 'todos', label: 'Todos', icon: 'bi-grid' }
-    ];
-
-    const filterBtns = filters.map(f =>
-        `<button class="btn btn-sm ${f.key === filtro ? 'btn-lans' : 'btn-outline-secondary'}"
-                 onclick="showAdminPedidos('${f.key}')">
-            <i class="bi ${f.icon} me-1"></i>${f.label}
-        </button>`
-    ).join('');
-
-    if (adminPedidos.length === 0) {
-        main.innerHTML = `
-            <h5 class="mb-3"><i class="bi bi-clipboard-data me-2 text-lans"></i>Gestion de Pedidos</h5>
-            <div class="filter-tabs d-flex flex-wrap gap-2 mb-3">${filterBtns}</div>
-            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin pedidos</h5></div>`;
-        return;
-    }
-
-    let rows = '';
-    adminPedidos.forEach(p => {
-        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
-        const totalItems = (p.detalles || []).reduce((s, i) => s + i.cantidad, 0);
-        const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
-
-        let actions = '';
-        if (p.estado === 'pendiente' || p.estado === 'aprobado_lider') {
-            actions = `
-                <button class="btn btn-success btn-sm me-1" onclick="aprobarPedido('${p.id}','aprobado')" title="Aprobar">
-                    <i class="bi bi-check-lg"></i>
-                </button>
-                <button class="btn btn-danger btn-sm me-1" onclick="aprobarPedido('${p.id}','rechazado')" title="Rechazar">
-                    <i class="bi bi-x-lg"></i>
-                </button>`;
-        }
-        actions += `
-            <button class="btn btn-outline-danger btn-sm" onclick="eliminarPedido('${p.id}')" title="Eliminar">
-                <i class="bi bi-trash"></i>
-            </button>`;
-
-        rows += `
-            <tr>
-                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
-                <td>${p.nombreEmpleado}</td>
-                <td>${p.area}</td>
-                <td><small>${itemsList}</small></td>
-                <td class="text-center">${totalItems}</td>
-                <td class="text-center">${badgeEstado(p.estado)}</td>
-                <td>${fecha}</td>
-                <td class="text-center">${actions}</td>
-            </tr>`;
-    });
-
-    main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-clipboard-data me-2 text-lans"></i>Gestion de Pedidos</h5>
-        <div class="filter-tabs d-flex flex-wrap gap-2 mb-3">${filterBtns}</div>
-        <div class="card card-lans">
-            <div class="table-responsive">
-                <table class="table table-lans table-hover mb-0">
-                    <thead><tr>
-                        <th>ID</th><th>Empleado</th><th>Area</th><th>Productos</th>
-                        <th class="text-center">Cant.</th><th class="text-center">Estado</th>
-                        <th>Fecha</th><th class="text-center">Acciones</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        </div>`;
 }
 
 // ═══════════════════════════════
@@ -971,37 +834,37 @@ async function showExportar() {
 
     let snap;
     try {
-        snap = await db.collection('lans_pedidos').where('estado', '==', 'aprobado').get();
+        snap = await db.collection('lans_pedidos').get();
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
         return;
     }
 
-    const exportPedidos = [];
-    snap.forEach(d => exportPedidos.push({ id: d.id, ...d.data() }));
-    exportPedidos.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+    const exportEntregas = [];
+    snap.forEach(d => exportEntregas.push({ id: d.id, ...d.data() }));
+    exportEntregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
-    if (exportPedidos.length === 0) {
+    if (exportEntregas.length === 0) {
         main.innerHTML = `<div class="empty-state">
             <i class="bi bi-file-earmark-excel"></i>
-            <h5>Sin pedidos aprobados</h5>
-            <p>No hay pedidos listos para exportar</p></div>`;
+            <h5>Sin entregas para exportar</h5>
+            <p>No hay entregas registradas</p></div>`;
         return;
     }
 
     let rows = '';
-    exportPedidos.forEach(p => {
+    exportEntregas.forEach(p => {
         const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
         const items = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
         rows += `
             <tr>
                 <td class="text-center">
                     <input type="checkbox" class="form-check-input export-check" value="${p.id}"
-                           data-detalles='${JSON.stringify(p.detalles || [])}'>
+                           data-detalles='${JSON.stringify(p.detalles || [])}' data-area="${p.area}">
                 </td>
                 <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
                 <td>${p.nombreEmpleado}</td>
-                <td>${p.area}</td>
+                <td><span class="badge bg-primary">${p.area}</span></td>
                 <td><small>${items}</small></td>
                 <td>${fecha}</td>
             </tr>`;
@@ -1033,7 +896,7 @@ async function showExportar() {
                 <table class="table table-lans table-hover mb-0">
                     <thead><tr>
                         <th class="text-center"><input type="checkbox" class="form-check-input" onchange="toggleAllExport(this.checked)"></th>
-                        <th>ID</th><th>Empleado</th><th>Area</th><th>Productos</th><th>Fecha</th>
+                        <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th><th>Fecha</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -1050,7 +913,7 @@ async function descargarExcel() {
     const noInv = document.getElementById('noInventario').value.trim() || 'SIN-NUMERO';
     const checked = document.querySelectorAll('.export-check:checked');
 
-    if (checked.length === 0) { showAlert('Selecciona al menos un pedido', 'warning'); return; }
+    if (checked.length === 0) { showAlert('Selecciona al menos una entrega', 'warning'); return; }
 
     const consolidated = {};
     checked.forEach(cb => {
@@ -1061,7 +924,7 @@ async function descargarExcel() {
     });
 
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Pedido LANS');
+    const ws = wb.addWorksheet('Entregas LANS');
     ws.columns = [
         { header: 'No. Inventario', key: 'inv', width: 20 },
         { header: 'Descripcion de Linea', key: 'desc', width: 38 },
@@ -1088,7 +951,7 @@ async function descargarExcel() {
 
     const buffer = await wb.xlsx.writeBuffer();
     const fecha = new Date().toISOString().slice(0, 10);
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `LANS_Pedido_${fecha}.xlsx`);
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `LANS_Entregas_${fecha}.xlsx`);
     showAlert(`Excel descargado con ${Object.keys(consolidated).length} productos`, 'success');
 
     checked.forEach(async cb => {
@@ -1109,34 +972,29 @@ async function showHistorial() {
     try { snap = await db.collection('lans_pedidos').get(); }
     catch (e) { main.innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`; return; }
 
-    const pedidos = [];
-    snap.forEach(d => pedidos.push({ id: d.id, ...d.data() }));
+    const entregas = [];
+    snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
 
     const porArea = {};
-    pedidos.forEach(p => {
+    entregas.forEach(p => {
         const area = p.area;
-        if (!porArea[area]) porArea[area] = { total: 0, aprobados: 0, rechazados: 0, pendientes: 0, articulos: 0, productos: {} };
+        if (!porArea[area]) porArea[area] = { total: 0, articulos: 0, productos: {} };
         porArea[area].total++;
-        if (p.estado === 'aprobado') porArea[area].aprobados++;
-        if (p.estado === 'rechazado') porArea[area].rechazados++;
-        if (p.estado === 'pendiente' || p.estado === 'aprobado_lider') porArea[area].pendientes++;
         (p.detalles || []).forEach(item => {
             porArea[area].articulos += item.cantidad;
             porArea[area].productos[item.nombre] = (porArea[area].productos[item.nombre] || 0) + item.cantidad;
         });
     });
 
-    const totalPedidos = pedidos.length;
-    const totalArticulos = pedidos.reduce((s, p) => s + (p.detalles || []).reduce((ss, i) => ss + i.cantidad, 0), 0);
-    const totalAprobados = pedidos.filter(p => p.estado === 'aprobado').length;
-    const totalPendientes = pedidos.filter(p => p.estado === 'pendiente' || p.estado === 'aprobado_lider').length;
+    const totalEntregas = entregas.length;
+    const totalArticulos = entregas.reduce((s, p) => s + (p.detalles || []).reduce((ss, i) => ss + i.cantidad, 0), 0);
+    const areasAtendidas = Object.keys(porArea).length;
 
     const kpis = `
         <div class="row mb-4">
-            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalPedidos}</div><small class="text-muted">Total Pedidos</small></div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold" style="color:var(--lans-success)">${totalAprobados}</div><small class="text-muted">Aprobados</small></div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold" style="color:var(--lans-warning)">${totalPendientes}</div><small class="text-muted">Pendientes</small></div></div>
-            <div class="col-6 col-md-3 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalArticulos}</div><small class="text-muted">Total Articulos</small></div></div>
+            <div class="col-6 col-md-4 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalEntregas}</div><small class="text-muted">Total Entregas</small></div></div>
+            <div class="col-6 col-md-4 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${totalArticulos}</div><small class="text-muted">Total Articulos</small></div></div>
+            <div class="col-12 col-md-4 mb-2"><div class="card card-lans text-center p-3"><div class="fs-2 fw-bold text-lans">${areasAtendidas}</div><small class="text-muted">Areas Atendidas</small></div></div>
         </div>`;
 
     let areaCards = '';
@@ -1149,14 +1007,9 @@ async function showHistorial() {
             <div class="col-md-6 col-lg-4 mb-3"><div class="card card-lans h-100">
                 <div class="card-header card-header-lans"><i class="bi bi-building me-2"></i>${area}</div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between mb-2"><span class="fw-bold">${stats.total} pedidos</span><span class="small text-muted">${stats.articulos} articulos</span></div>
+                    <div class="d-flex justify-content-between mb-2"><span class="fw-bold">${stats.total} entregas</span><span class="small text-muted">${stats.articulos} articulos</span></div>
                     <div class="progress mb-3" style="height:8px"><div class="progress-bar" style="width:${Math.round((stats.total/maxP)*100)}%;background:var(--lans-blue)"></div></div>
-                    <div class="d-flex gap-2 mb-3 flex-wrap">
-                        <span class="badge badge-aprobado"><i class="bi bi-check me-1"></i>${stats.aprobados}</span>
-                        <span class="badge badge-pendiente"><i class="bi bi-clock me-1"></i>${stats.pendientes}</span>
-                        <span class="badge badge-rechazado"><i class="bi bi-x me-1"></i>${stats.rechazados}</span>
-                    </div>
-                    <h6 class="small fw-bold text-muted mb-1">Mas solicitados:</h6>
+                    <h6 class="small fw-bold text-muted mb-1">Mas entregados:</h6>
                     ${topList || '<span class="small text-muted">Sin productos</span>'}
                 </div>
             </div></div>`;
@@ -1165,7 +1018,7 @@ async function showHistorial() {
     if (!areaCards) areaCards = '<div class="col-12"><div class="empty-state"><i class="bi bi-bar-chart-line"></i><h5>Sin historial</h5></div></div>';
 
     const globalProds = {};
-    pedidos.forEach(p => (p.detalles || []).forEach(i => { globalProds[i.nombre] = (globalProds[i.nombre] || 0) + i.cantidad; }));
+    entregas.forEach(p => (p.detalles || []).forEach(i => { globalProds[i.nombre] = (globalProds[i.nombre] || 0) + i.cantidad; }));
     const topGlobal = Object.entries(globalProds).sort((a, b) => b[1] - a[1]).slice(0, 10);
     let topRows = '';
     if (topGlobal.length > 0) {
@@ -1327,7 +1180,6 @@ async function exportarCatalogo() {
 
 // ═══════════════════════════════
 //  VIEW: Usuarios (Admin)
-//  Muestra usuarios con rolLans, permite dar/quitar acceso LANS
 // ═══════════════════════════════
 
 async function showUsuarios() {
@@ -1347,7 +1199,7 @@ async function showUsuarios() {
 
     let cards = '';
     lansUsers.forEach(u => {
-        const rolBadge = u.rolLans === 'admin' ? 'bg-danger' : u.rolLans === 'lider' ? 'bg-primary' : 'bg-info';
+        const rolBadge = u.rolLans === 'admin' ? 'bg-danger' : 'bg-info';
         cards += `
             <div class="col-md-6 col-lg-4 mb-3">
                 <div class="card card-lans user-card h-100">
@@ -1368,10 +1220,9 @@ async function showUsuarios() {
                     <div class="card-footer bg-white d-flex gap-1">
                         <select class="form-select form-select-sm" style="width:auto" onchange="cambiarRolLans('${u.id}', this.value)">
                             <option value="almacen" ${u.rolLans==='almacen'?'selected':''}>Almacen</option>
-                            <option value="lider" ${u.rolLans==='lider'?'selected':''}>Lider</option>
                             <option value="admin" ${u.rolLans==='admin'?'selected':''}>Admin</option>
                         </select>
-                        <button class="btn btn-outline-danger btn-sm" onclick="quitarAccesoLans('${u.id}', '${u.nombre}')">
+                        <button class="btn btn-outline-danger btn-sm" onclick="quitarAccesoLans('${u.id}', '${u.nombre.replace(/'/g, "\\'")}')">
                             <i class="bi bi-x-lg me-1"></i>Quitar acceso
                         </button>
                     </div>` : ''}
@@ -1379,7 +1230,6 @@ async function showUsuarios() {
             </div>`;
     });
 
-    // Usuarios PROESA sin acceso LANS
     let proesaList = '';
     if (proesaOnly.length > 0) {
         const rows = proesaOnly.map(u => `
@@ -1391,7 +1241,6 @@ async function showUsuarios() {
                 <td>
                     <select class="form-select form-select-sm" style="width:auto;display:inline" id="rolFor_${u.id}">
                         <option value="almacen">Almacen</option>
-                        <option value="lider">Lider</option>
                         <option value="admin">Admin</option>
                     </select>
                     <button class="btn btn-success btn-sm ms-1" onclick="darAccesoLans('${u.id}')">
@@ -1436,7 +1285,6 @@ async function showUsuarios() {
                         <div class="col-md-2"><label class="form-label small fw-bold">Rol LANS</label>
                             <select id="newUserRol" class="form-select form-select-sm">
                                 <option value="almacen">Almacen</option>
-                                <option value="lider">Lider</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
@@ -1508,7 +1356,8 @@ async function crearUsuario() {
 
 function badgeEstado(estado) {
     const map = {
-        pendiente:      { clase: 'badge-pendiente',      texto: 'Pendiente' },
+        entregado:      { clase: 'bg-success',            texto: 'Entregado' },
+        pendiente:      { clase: 'badge-pendiente',       texto: 'Pendiente' },
         aprobado_lider: { clase: 'badge-aprobado-lider',  texto: 'Aprobado Lider' },
         aprobado:       { clase: 'badge-aprobado',        texto: 'Aprobado' },
         rechazado:      { clase: 'badge-rechazado',       texto: 'Rechazado' }

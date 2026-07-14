@@ -360,6 +360,7 @@ function renderNav() {
     if (role === 'admin') {
         links += navLink('showEntregas', 'bi-clipboard-data', 'Entregas');
         links += navLink('showExportar', 'bi-file-earmark-excel', 'Exportar');
+        links += navLink('showArchivo', 'bi-archive', 'Archivo');
         links += navLink('showHistorial', 'bi-bar-chart-line', 'Historial');
         links += navLink('showAreas', 'bi-diagram-3', 'Areas');
         links += navLink('showUsuarios', 'bi-people', 'Usuarios');
@@ -923,7 +924,7 @@ async function desarchivarEntrega(entregaId) {
     try {
         await db.collection('lans_pedidos').doc(entregaId).update({ archivado: false });
         showAlert('Entrega desarchivada', 'success');
-        showHistorial();
+        showArchivo();
     } catch (e) {
         showAlert('Error: ' + e.message, 'danger');
     }
@@ -1198,44 +1199,119 @@ async function showHistorial() {
         topRows = topGlobal.map(([n, c], i) => `<tr><td class="text-center">${i+1}</td><td>${n}</td><td><div class="d-flex align-items-center gap-2"><div class="progress flex-fill" style="height:6px"><div class="progress-bar" style="width:${Math.round((c/mx)*100)}%;background:var(--lans-blue)"></div></div><strong>${c}</strong></div></td></tr>`).join('');
     }
 
-    const archivadas = entregas.filter(e => e.archivado);
-    let archRows = '';
-    if (archivadas.length > 0) {
-        archivadas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-        archivadas.forEach(p => {
-            const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
-            const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
-            archRows += `<tr>
+    main.innerHTML = `
+        <h5 class="mb-3"><i class="bi bi-bar-chart-line me-2 text-lans"></i>Historial por Area</h5>
+        ${kpis}<div class="row">${areaCards}</div>
+        ${topGlobal.length > 0 ? `<div class="card card-lans mt-3"><div class="card-header card-header-lans"><i class="bi bi-trophy me-2"></i>Top 10 Productos</div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead><tbody>${topRows}</tbody></table></div></div>` : ''}`;
+}
+
+// ═══════════════════════════════
+//  VIEW: Archivo
+// ═══════════════════════════════
+
+let _archivoFiltroArea = 'todas';
+let _archivoFechaDesde = '';
+let _archivoFechaHasta = '';
+
+async function showArchivo(filtroArea, fechaDesde, fechaHasta) {
+    _archivoFiltroArea = filtroArea !== undefined ? filtroArea : _archivoFiltroArea;
+    _archivoFechaDesde = fechaDesde !== undefined ? fechaDesde : _archivoFechaDesde;
+    _archivoFechaHasta = fechaHasta !== undefined ? fechaHasta : _archivoFechaHasta;
+    setActiveNav('showArchivo');
+    const main = document.getElementById('mainContent');
+    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
+
+    let snap;
+    try { snap = await db.collection('lans_pedidos').get(); }
+    catch (e) { main.innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`; return; }
+
+    let archivadas = [];
+    snap.forEach(d => { const data = { id: d.id, ...d.data() }; if (data.archivado) archivadas.push(data); });
+
+    if (_archivoFiltroArea !== 'todas') {
+        archivadas = archivadas.filter(e => e.area === _archivoFiltroArea);
+    }
+    if (_archivoFechaDesde) {
+        const desde = new Date(_archivoFechaDesde + 'T00:00:00');
+        archivadas = archivadas.filter(e => e.fecha && e.fecha.toDate() >= desde);
+    }
+    if (_archivoFechaHasta) {
+        const hasta = new Date(_archivoFechaHasta + 'T23:59:59');
+        archivadas = archivadas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
+    }
+
+    archivadas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+
+    const areaOpts = ['todas', ...AREAS];
+    const filtros = `
+        <div class="card card-lans mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Area</label>
+                        <select class="form-select form-select-sm" onchange="showArchivo(this.value)">
+                            ${areaOpts.map(a => `<option value="${a}" ${a === _archivoFiltroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Desde</label>
+                        <input type="date" class="form-control form-control-sm" value="${_archivoFechaDesde}" onchange="showArchivo(undefined, this.value)">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Hasta</label>
+                        <input type="date" class="form-control form-control-sm" value="${_archivoFechaHasta}" onchange="showArchivo(undefined, undefined, this.value)">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="showArchivo('todas','','')">
+                            <i class="bi bi-x-circle me-1"></i>Limpiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+    let rows = '';
+    archivadas.forEach(p => {
+        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
+        const hora = p.fecha ? p.fecha.toDate().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
+        const totalItems = (p.detalles || []).reduce((s, i) => s + i.cantidad, 0);
+        const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
+
+        rows += `
+            <tr>
                 <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
                 <td>${p.nombreEmpleado}</td>
                 <td><span class="badge bg-primary">${p.area}</span></td>
                 <td><small>${itemsList}</small></td>
-                <td>${fecha}</td>
+                <td class="text-center">${totalItems}</td>
+                <td>${fecha} <small class="text-muted">${hora}</small></td>
                 <td class="text-center">
+                    <button class="btn btn-outline-info btn-sm me-1" onclick="verDetalle('${p.id}')" title="Ver detalle">
+                        <i class="bi bi-eye"></i>
+                    </button>
                     <button class="btn btn-outline-warning btn-sm" onclick="desarchivarEntrega('${p.id}')" title="Desarchivar">
                         <i class="bi bi-arrow-counterclockwise"></i>
                     </button>
                 </td>
             </tr>`;
-        });
-    }
+    });
 
-    const seccionArchivadas = archivadas.length > 0 ? `
-        <div class="card card-lans mt-3">
-            <div class="card-header card-header-lans"><i class="bi bi-archive me-2"></i>Entregas Archivadas <span class="badge bg-secondary ms-1">${archivadas.length}</span></div>
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead><tr><th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th><th>Fecha</th><th class="text-center">Accion</th></tr></thead>
-                    <tbody>${archRows}</tbody>
-                </table>
-            </div>
-        </div>` : '';
+    if (!rows) rows = '<tr><td colspan="7"><div class="empty-state"><i class="bi bi-archive"></i><h5>Sin entregas archivadas</h5><p class="text-muted">Las entregas archivadas apareceran aqui</p></div></td></tr>';
 
     main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-bar-chart-line me-2 text-lans"></i>Historial por Area</h5>
-        ${kpis}<div class="row">${areaCards}</div>
-        ${topGlobal.length > 0 ? `<div class="card card-lans mt-3"><div class="card-header card-header-lans"><i class="bi bi-trophy me-2"></i>Top 10 Productos</div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead><tbody>${topRows}</tbody></table></div></div>` : ''}
-        ${seccionArchivadas}`;
+        <h5 class="mb-3"><i class="bi bi-archive me-2 text-lans"></i>Archivo <span class="badge bg-secondary ms-1">${archivadas.length}</span></h5>
+        ${filtros}
+        <div class="card card-lans">
+            <div class="table-responsive">
+                <table class="table table-lans table-hover mb-0">
+                    <thead><tr>
+                        <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th>
+                        <th class="text-center">Cant.</th><th>Fecha</th><th class="text-center">Acciones</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
 }
 
 // ═══════════════════════════════

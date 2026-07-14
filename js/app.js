@@ -960,14 +960,19 @@ async function descargarExcel() {
     if (checked.length === 0) { showAlert('Selecciona al menos una entrega', 'warning'); return; }
 
     const prodSnap = await db.collection('lans_productos').get();
-    const costosCatalogo = {};
-    prodSnap.forEach(d => { const p = d.data(); costosCatalogo[p.nombre] = p.costo || 0; });
+    const costosPorNombre = {};
+    const costosPorId = {};
+    prodSnap.forEach(d => {
+        const p = d.data();
+        costosPorNombre[p.nombre] = p.costo || 0;
+        costosPorId[d.id] = p.costo || 0;
+    });
 
     const consolidated = {};
     checked.forEach(cb => {
         JSON.parse(cb.dataset.detalles).forEach(item => {
             if (!consolidated[item.nombre]) {
-                const costo = item.costo !== undefined ? item.costo : (costosCatalogo[item.nombre] || 0);
+                const costo = (item.costo && item.costo > 0) ? item.costo : (costosPorId[item.productoId] || costosPorNombre[item.nombre] || 0);
                 consolidated[item.nombre] = { nombre: item.nombre, unidad: item.unidad, cantidad: 0, costo: costo };
             }
             consolidated[item.nombre].cantidad += item.cantidad;

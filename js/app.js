@@ -1263,8 +1263,6 @@ async function showUsuarios() {
             </div>`;
     }
 
-    const areaOpts = AREAS.map(a => `<option value="${a}">${a}</option>`).join('');
-
     main.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0"><i class="bi bi-people me-2 text-lans"></i>Usuarios LANS</h5>
@@ -1279,16 +1277,15 @@ async function showUsuarios() {
                 <div class="card-body">
                     <p class="small text-muted mb-2">Para usuarios que ya existen en PROESA, usa la tabla de abajo para darles acceso.</p>
                     <div class="row g-2">
-                        <div class="col-md-3"><label class="form-label small fw-bold">Nombre completo</label><input type="text" id="newUserNombre" class="form-control form-control-sm"></div>
-                        <div class="col-md-2"><label class="form-label small fw-bold">Usuario</label><input type="text" id="newUserUser" class="form-control form-control-sm"></div>
-                        <div class="col-md-2"><label class="form-label small fw-bold">Contrasena</label><input type="password" id="newUserPass" class="form-control form-control-sm"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Nombre completo</label><input type="text" id="newUserNombre" class="form-control form-control-sm"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Usuario</label><input type="text" id="newUserUser" class="form-control form-control-sm"></div>
+                        <div class="col-md-3"><label class="form-label small fw-bold">Contrasena</label><input type="password" id="newUserPass" class="form-control form-control-sm"></div>
                         <div class="col-md-2"><label class="form-label small fw-bold">Rol LANS</label>
                             <select id="newUserRol" class="form-select form-select-sm">
                                 <option value="almacen">Almacen</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
-                        <div class="col-md-3"><label class="form-label small fw-bold">Area</label><select id="newUserArea" class="form-select form-select-sm">${areaOpts}</select></div>
                     </div>
                     <button class="btn btn-success btn-sm mt-3" onclick="crearUsuario()"><i class="bi bi-check-lg me-1"></i>Crear</button>
                     <button class="btn btn-outline-secondary btn-sm mt-3 ms-2" onclick="toggleUserForm()">Cancelar</button>
@@ -1328,7 +1325,6 @@ async function crearUsuario() {
     const user   = document.getElementById('newUserUser').value.trim();
     const pass   = document.getElementById('newUserPass').value;
     const rolLans = document.getElementById('newUserRol').value;
-    const area   = document.getElementById('newUserArea').value;
 
     if (!nombre || !user || pass.length < 6) {
         showAlert('Completa todos los campos (contrasena min 6)', 'warning');
@@ -1339,7 +1335,7 @@ async function crearUsuario() {
         const email = `${user}@proesa.app`;
         const cred = await secondaryAuth.createUserWithEmailAndPassword(email, pass);
         await db.collection('usuarios').doc(cred.user.uid).set({
-            nombre, usuario: user, email, rolLans, area, activo: true,
+            nombre, usuario: user, email, rolLans, activo: true,
             creadoEn: firebase.firestore.FieldValue.serverTimestamp()
         });
         await secondaryAuth.signOut();

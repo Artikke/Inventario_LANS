@@ -616,7 +616,14 @@ async function submitEntrega() {
 //  VIEW: Mis Entregas
 // ═══════════════════════════════
 
-async function showMisEntregas() {
+let _misEntregasArea = 'todas';
+let _misEntregasDesde = '';
+let _misEntregasHasta = '';
+
+async function showMisEntregas(filtroArea, fechaDesde, fechaHasta) {
+    _misEntregasArea = filtroArea !== undefined ? filtroArea : _misEntregasArea;
+    _misEntregasDesde = fechaDesde !== undefined ? fechaDesde : _misEntregasDesde;
+    _misEntregasHasta = fechaHasta !== undefined ? fechaHasta : _misEntregasHasta;
     setActiveNav('showMisEntregas');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
@@ -629,23 +636,69 @@ async function showMisEntregas() {
         return;
     }
 
-    if (snap.empty) {
-        main.innerHTML = `<div class="empty-state">
-            <i class="bi bi-inbox"></i><h5>No tienes entregas registradas</h5>
-            <p>Registra tu primera entrega de material</p>
-            <button class="btn btn-lans" onclick="showRegistrarEntrega()">
-                <i class="bi bi-box-arrow-in-down me-2"></i>Registrar Entrega
-            </button></div>`;
+    let entregas = [];
+    snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
+
+    if (_misEntregasArea !== 'todas') {
+        entregas = entregas.filter(e => e.area === _misEntregasArea);
+    }
+    if (_misEntregasDesde) {
+        const desde = new Date(_misEntregasDesde + 'T00:00:00');
+        entregas = entregas.filter(e => e.fecha && e.fecha.toDate() >= desde);
+    }
+    if (_misEntregasHasta) {
+        const hasta = new Date(_misEntregasHasta + 'T23:59:59');
+        entregas = entregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
+    }
+
+    entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+
+    const areaOpts = ['todas', ...AREAS];
+    const filtros = `
+        <div class="card card-lans mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1"></i>Area</label>
+                        <select class="form-select form-select-sm" onchange="showMisEntregas(this.value)">
+                            ${areaOpts.map(a => `<option value="${a}" ${a === _misEntregasArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Desde</label>
+                        <input type="date" class="form-control form-control-sm" value="${_misEntregasDesde}"
+                               onchange="showMisEntregas(undefined, this.value, undefined)">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Hasta</label>
+                        <input type="date" class="form-control form-control-sm" value="${_misEntregasHasta}"
+                               onchange="showMisEntregas(undefined, undefined, this.value)">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="_misEntregasArea='todas';_misEntregasDesde='';_misEntregasHasta='';showMisEntregas('todas','','')">
+                            <i class="bi bi-x-circle me-1"></i>Limpiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+    if (entregas.length === 0) {
+        main.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="bi bi-list-check me-2 text-lans"></i>Mis Entregas</h5>
+                <button class="btn btn-lans btn-sm" onclick="showRegistrarEntrega()">
+                    <i class="bi bi-plus-lg me-1"></i>Nueva
+                </button>
+            </div>
+            ${filtros}
+            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin entregas</h5><p>No hay entregas con estos filtros</p></div>`;
         return;
     }
 
-    const entregas = [];
-    snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
-    entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-
     let cards = '';
     entregas.forEach(p => {
-        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : 'Pendiente';
+        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
         const items = (p.detalles || []).map(i =>
             `<li class="list-group-item d-flex justify-content-between py-1 px-2">
                 <span>${i.nombre}</span>
@@ -679,11 +732,12 @@ async function showMisEntregas() {
 
     main.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="bi bi-list-check me-2 text-lans"></i>Mis Entregas</h5>
+            <h5 class="mb-0"><i class="bi bi-list-check me-2 text-lans"></i>Mis Entregas <span class="badge bg-secondary ms-1">${entregas.length}</span></h5>
             <button class="btn btn-lans btn-sm" onclick="showRegistrarEntrega()">
                 <i class="bi bi-plus-lg me-1"></i>Nueva
             </button>
         </div>
+        ${filtros}
         <div class="row">${cards}</div>`;
 }
 

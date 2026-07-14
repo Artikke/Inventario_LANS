@@ -749,6 +749,7 @@ async function showMisEntregas(filtroArea, fechaDesde, fechaHasta) {
 let _entregasFiltroArea = 'todas';
 let _entregasFechaDesde = '';
 let _entregasFechaHasta = '';
+let _entregasBusqueda = '';
 
 async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
     _entregasFiltroArea = filtroArea || _entregasFiltroArea || 'todas';
@@ -783,6 +784,16 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
         entregas = entregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
     }
 
+    if (_entregasBusqueda) {
+        const q = _entregasBusqueda.toLowerCase();
+        entregas = entregas.filter(e =>
+            (e.nombreEmpleado || '').toLowerCase().includes(q) ||
+            (e.area || '').toLowerCase().includes(q) ||
+            e.id.slice(-5).toUpperCase().includes(q.toUpperCase()) ||
+            (e.detalles || []).some(i => i.nombre.toLowerCase().includes(q))
+        );
+    }
+
     entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
     const areaOpts = ['todas', ...AREAS];
@@ -791,6 +802,11 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
             <div class="card-body py-2">
                 <div class="row g-2 align-items-end">
                     <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-search me-1"></i>Buscar</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="Nombre, producto, area..."
+                               value="${_entregasBusqueda}" oninput="_entregasBusqueda=this.value;showEntregas()">
+                    </div>
+                    <div class="col-md-2">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1"></i>Area</label>
                         <select class="form-select form-select-sm" onchange="showEntregas(this.value)">
                             ${areaOpts.map(a => `<option value="${a}" ${a === _entregasFiltroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
@@ -806,23 +822,23 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                         <input type="date" class="form-control form-control-sm" value="${_entregasFechaHasta}"
                                onchange="showEntregas(undefined, undefined, this.value)">
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label small fw-bold mb-1">No. Inventario</label>
                         <input type="text" id="noInventario" class="form-control form-control-sm"
                                placeholder="LANS-INV-0001" value="LANS-INV-0001">
                     </div>
-                    <div class="col-md-3">
-                        <div class="d-flex gap-1">
-                            <button class="btn btn-lans btn-sm flex-fill" onclick="descargarExcel()">
-                                <i class="bi bi-download me-1"></i>Excel
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()" title="Seleccionar todos">
-                                <i class="bi bi-check2-all"></i>
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';showEntregas('todas','','')" title="Limpiar filtros">
-                                <i class="bi bi-x-circle"></i>
-                            </button>
-                        </div>
+                </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-12 d-flex gap-1 justify-content-end">
+                        <button class="btn btn-lans btn-sm" onclick="descargarExcel()">
+                            <i class="bi bi-download me-1"></i>Excel
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()" title="Seleccionar todos">
+                            <i class="bi bi-check2-all"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';_entregasBusqueda='';showEntregas('todas','','')" title="Limpiar filtros">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -842,6 +858,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
         const hora = p.fecha ? p.fecha.toDate().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
         const totalItems = (p.detalles || []).reduce((s, i) => s + i.cantidad, 0);
         const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
+        const exportado = p.fechaExportacion ? '<span class="badge bg-success ms-1" title="Ya exportado a Excel"><i class="bi bi-check2"></i> Exportado</span>' : '';
 
         rows += `
             <tr>
@@ -849,7 +866,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                     <input type="checkbox" class="form-check-input export-check" value="${p.id}"
                            data-detalles='${JSON.stringify(p.detalles || [])}' data-area="${p.area}">
                 </td>
-                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
+                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong>${exportado}</td>
                 <td>${p.nombreEmpleado}</td>
                 <td><span class="badge bg-primary">${p.area}</span></td>
                 <td><small>${itemsList}</small></td>
@@ -1023,9 +1040,12 @@ async function descargarExcel() {
     saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `LANS_Entregas_${fecha}.xlsx`);
     showAlert(`Excel descargado con ${Object.keys(consolidated).length} productos — Total: $${granTotal.toFixed(2)}`, 'success');
 
-    checked.forEach(async cb => {
-        await db.collection('lans_pedidos').doc(cb.value).update({ noInventario: noInv, fechaExportacion: firebase.firestore.FieldValue.serverTimestamp() });
+    const updatePromises = [];
+    checked.forEach(cb => {
+        updatePromises.push(db.collection('lans_pedidos').doc(cb.value).update({ noInventario: noInv, fechaExportacion: firebase.firestore.FieldValue.serverTimestamp() }));
     });
+    await Promise.all(updatePromises);
+    showEntregas();
 }
 
 // ═══════════════════════════════

@@ -918,6 +918,17 @@ async function archivarEntrega(entregaId) {
     }
 }
 
+async function desarchivarEntrega(entregaId) {
+    if (!confirm('Desarchivar esta entrega? Volvera a aparecer en Entregas y Exportar.')) return;
+    try {
+        await db.collection('lans_pedidos').doc(entregaId).update({ archivado: false });
+        showAlert('Entrega desarchivada', 'success');
+        showHistorial();
+    } catch (e) {
+        showAlert('Error: ' + e.message, 'danger');
+    }
+}
+
 async function eliminarEntrega(entregaId) {
     if (!confirm('Eliminar esta entrega? Esta accion no se puede deshacer.')) return;
     try {
@@ -1187,10 +1198,44 @@ async function showHistorial() {
         topRows = topGlobal.map(([n, c], i) => `<tr><td class="text-center">${i+1}</td><td>${n}</td><td><div class="d-flex align-items-center gap-2"><div class="progress flex-fill" style="height:6px"><div class="progress-bar" style="width:${Math.round((c/mx)*100)}%;background:var(--lans-blue)"></div></div><strong>${c}</strong></div></td></tr>`).join('');
     }
 
+    const archivadas = entregas.filter(e => e.archivado);
+    let archRows = '';
+    if (archivadas.length > 0) {
+        archivadas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
+        archivadas.forEach(p => {
+            const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
+            const itemsList = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
+            archRows += `<tr>
+                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
+                <td>${p.nombreEmpleado}</td>
+                <td><span class="badge bg-primary">${p.area}</span></td>
+                <td><small>${itemsList}</small></td>
+                <td>${fecha}</td>
+                <td class="text-center">
+                    <button class="btn btn-outline-warning btn-sm" onclick="desarchivarEntrega('${p.id}')" title="Desarchivar">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    const seccionArchivadas = archivadas.length > 0 ? `
+        <div class="card card-lans mt-3">
+            <div class="card-header card-header-lans"><i class="bi bi-archive me-2"></i>Entregas Archivadas <span class="badge bg-secondary ms-1">${archivadas.length}</span></div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th><th>Fecha</th><th class="text-center">Accion</th></tr></thead>
+                    <tbody>${archRows}</tbody>
+                </table>
+            </div>
+        </div>` : '';
+
     main.innerHTML = `
         <h5 class="mb-3"><i class="bi bi-bar-chart-line me-2 text-lans"></i>Historial por Area</h5>
         ${kpis}<div class="row">${areaCards}</div>
-        ${topGlobal.length > 0 ? `<div class="card card-lans mt-3"><div class="card-header card-header-lans"><i class="bi bi-trophy me-2"></i>Top 10 Productos</div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead><tbody>${topRows}</tbody></table></div></div>` : ''}`;
+        ${topGlobal.length > 0 ? `<div class="card card-lans mt-3"><div class="card-header card-header-lans"><i class="bi bi-trophy me-2"></i>Top 10 Productos</div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th class="text-center" style="width:50px">#</th><th>Producto</th><th style="width:40%">Cantidad</th></tr></thead><tbody>${topRows}</tbody></table></div></div>` : ''}
+        ${seccionArchivadas}`;
 }
 
 // ═══════════════════════════════

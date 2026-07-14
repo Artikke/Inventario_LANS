@@ -444,7 +444,7 @@ async function showRegistrarEntrega() {
                 <td class="text-center"><small class="text-muted">${p.unidad}</small></td>
                 <td class="text-center">
                     <input type="number" min="0" value="0" class="form-control form-control-sm qty-input"
-                           data-id="${p.id}" data-nombre="${p.nombre}" data-unidad="${p.unidad}"
+                           data-id="${p.id}" data-nombre="${p.nombre}" data-unidad="${p.unidad}" data-costo="${p.costo || 0}"
                            onchange="updateSummary()" oninput="updateSummary()">
                 </td>
             </tr>`).join('');
@@ -578,7 +578,8 @@ async function submitEntrega() {
                 productoId: inp.dataset.id,
                 nombre: inp.dataset.nombre,
                 unidad: inp.dataset.unidad,
-                cantidad: qty
+                cantidad: qty,
+                costo: parseFloat(inp.dataset.costo) || 0
             });
         }
     });
@@ -768,6 +769,8 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
     let entregas = [];
     snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
 
+    entregas = entregas.filter(e => !e.archivado);
+
     if (_entregasFiltroArea !== 'todas') {
         entregas = entregas.filter(e => e.area === _entregasFiltroArea);
     }
@@ -839,6 +842,9 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                     <button class="btn btn-outline-info btn-sm me-1" onclick="verDetalle('${p.id}')" title="Ver detalle">
                         <i class="bi bi-eye"></i>
                     </button>
+                    <button class="btn btn-outline-success btn-sm me-1" onclick="archivarEntrega('${p.id}')" title="Archivar">
+                        <i class="bi bi-archive"></i>
+                    </button>
                     <button class="btn btn-outline-danger btn-sm" onclick="eliminarEntrega('${p.id}')" title="Eliminar">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -901,6 +907,17 @@ async function verDetalle(entregaId) {
     document.getElementById('detalleModal').addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
+async function archivarEntrega(entregaId) {
+    if (!confirm('Archivar esta entrega? Se ocultara de Entregas y Exportar pero seguira visible en Historial.')) return;
+    try {
+        await db.collection('lans_pedidos').doc(entregaId).update({ archivado: true });
+        showAlert('Entrega archivada', 'success');
+        showEntregas();
+    } catch (e) {
+        showAlert('Error: ' + e.message, 'danger');
+    }
+}
+
 async function eliminarEntrega(entregaId) {
     if (!confirm('Eliminar esta entrega? Esta accion no se puede deshacer.')) return;
     try {
@@ -936,6 +953,8 @@ async function showExportar(fechaDesde, fechaHasta) {
 
     let exportEntregas = [];
     snap.forEach(d => exportEntregas.push({ id: d.id, ...d.data() }));
+
+    exportEntregas = exportEntregas.filter(e => !e.archivado);
 
     if (_exportFechaDesde) {
         const desde = new Date(_exportFechaDesde + 'T00:00:00');
@@ -1037,10 +1056,17 @@ async function descargarExcel() {
 
     if (checked.length === 0) { showAlert('Selecciona al menos una entrega', 'warning'); return; }
 
+    const prodSnap = await db.collection('lans_productos').get();
+    const costosCatalogo = {};
+    prodSnap.forEach(d => { const p = d.data(); costosCatalogo[p.nombre] = p.costo || 0; });
+
     const consolidated = {};
     checked.forEach(cb => {
         JSON.parse(cb.dataset.detalles).forEach(item => {
-            if (!consolidated[item.nombre]) consolidated[item.nombre] = { nombre: item.nombre, unidad: item.unidad, cantidad: 0 };
+            if (!consolidated[item.nombre]) {
+                const costo = item.costo !== undefined ? item.costo : (costosCatalogo[item.nombre] || 0);
+                consolidated[item.nombre] = { nombre: item.nombre, unidad: item.unidad, cantidad: 0, costo: costo };
+            }
             consolidated[item.nombre].cantidad += item.cantidad;
         });
     });
@@ -1051,7 +1077,9 @@ async function descargarExcel() {
         { header: 'No. Inventario', key: 'inv', width: 20 },
         { header: 'Descripcion de Linea', key: 'desc', width: 38 },
         { header: 'UM', key: 'um', width: 14 },
-        { header: 'Cant. Orden', key: 'cant', width: 14 }
+        { header: 'Cant. Orden', key: 'cant', width: 14 },
+        { header: 'Costo Unitario', key: 'costoUnit', width: 16 },
+        { header: 'Costo Total', key: 'costoTotal', width: 16 }
     ];
 
     const headerRow = ws.getRow(1);
@@ -1063,18 +1091,29 @@ async function descargarExcel() {
     });
     headerRow.height = 22;
 
+    let granTotal = 0;
     Object.values(consolidated).forEach(item => {
-        const row = ws.addRow({ inv: noInv, desc: item.nombre, um: item.unidad, cant: item.cantidad });
-        row.eachCell(cell => {
+        const costoTotal = item.costo * item.cantidad;
+        granTotal += costoTotal;
+        const row = ws.addRow({ inv: noInv, desc: item.nombre, um: item.unidad, cant: item.cantidad, costoUnit: item.costo, costoTotal: costoTotal });
+        row.eachCell((cell, colNumber) => {
             cell.border = { top: { style: 'thin', color: { argb: 'FFD4D4D4' } }, bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } }, left: { style: 'thin', color: { argb: 'FFD4D4D4' } }, right: { style: 'thin', color: { argb: 'FFD4D4D4' } } };
             cell.alignment = { vertical: 'middle' };
+            if (colNumber === 5 || colNumber === 6) cell.numFmt = '$#,##0.00';
         });
+    });
+
+    const totalRow = ws.addRow({ inv: '', desc: '', um: '', cant: '', costoUnit: 'TOTAL:', costoTotal: granTotal });
+    totalRow.eachCell((cell, colNumber) => {
+        cell.font = { bold: true, size: 11 };
+        cell.border = { top: { style: 'double', color: { argb: 'FF1A5276' } }, bottom: { style: 'double', color: { argb: 'FF1A5276' } } };
+        if (colNumber === 6) cell.numFmt = '$#,##0.00';
     });
 
     const buffer = await wb.xlsx.writeBuffer();
     const fecha = new Date().toISOString().slice(0, 10);
     saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `LANS_Entregas_${fecha}.xlsx`);
-    showAlert(`Excel descargado con ${Object.keys(consolidated).length} productos`, 'success');
+    showAlert(`Excel descargado con ${Object.keys(consolidated).length} productos — Total: $${granTotal.toFixed(2)}`, 'success');
 
     checked.forEach(async cb => {
         await db.collection('lans_pedidos').doc(cb.value).update({ noInventario: noInv, fechaExportacion: firebase.firestore.FieldValue.serverTimestamp() });

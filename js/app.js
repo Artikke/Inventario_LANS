@@ -359,7 +359,6 @@ function renderNav() {
 
     if (role === 'admin') {
         links += navLink('showEntregas', 'bi-clipboard-data', 'Entregas');
-        links += navLink('showExportar', 'bi-file-earmark-excel', 'Exportar');
         links += navLink('showArchivo', 'bi-archive', 'Archivo');
         links += navLink('showHistorial', 'bi-bar-chart-line', 'Historial');
         links += navLink('showAreas', 'bi-diagram-3', 'Areas');
@@ -791,26 +790,39 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
         <div class="card card-lans mb-3">
             <div class="card-body py-2">
                 <div class="row g-2 align-items-end">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1"></i>Area</label>
                         <select class="form-select form-select-sm" onchange="showEntregas(this.value)">
                             ${areaOpts.map(a => `<option value="${a}" ${a === _entregasFiltroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Desde</label>
                         <input type="date" class="form-control form-control-sm" value="${_entregasFechaDesde}"
                                onchange="showEntregas(undefined, this.value, undefined)">
                     </div>
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Hasta</label>
                         <input type="date" class="form-control form-control-sm" value="${_entregasFechaHasta}"
                                onchange="showEntregas(undefined, undefined, this.value)">
                     </div>
                     <div class="col-md-2">
-                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';showEntregas('todas','','')">
-                            <i class="bi bi-x-circle me-1"></i>Limpiar
-                        </button>
+                        <label class="form-label small fw-bold mb-1">No. Inventario</label>
+                        <input type="text" id="noInventario" class="form-control form-control-sm"
+                               placeholder="LANS-INV-0001" value="LANS-INV-0001">
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-lans btn-sm flex-fill" onclick="descargarExcel()">
+                                <i class="bi bi-download me-1"></i>Excel
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()" title="Seleccionar todos">
+                                <i class="bi bi-check2-all"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';showEntregas('todas','','')" title="Limpiar filtros">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -833,6 +845,10 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
 
         rows += `
             <tr>
+                <td class="text-center">
+                    <input type="checkbox" class="form-check-input export-check" value="${p.id}"
+                           data-detalles='${JSON.stringify(p.detalles || [])}' data-area="${p.area}">
+                </td>
                 <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
                 <td>${p.nombreEmpleado}</td>
                 <td><span class="badge bg-primary">${p.area}</span></td>
@@ -843,11 +859,8 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
                     <button class="btn btn-outline-info btn-sm me-1" onclick="verDetalle('${p.id}')" title="Ver detalle">
                         <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn btn-outline-success btn-sm me-1" onclick="archivarEntrega('${p.id}')" title="Archivar">
+                    <button class="btn btn-outline-danger btn-sm" onclick="archivarEntrega('${p.id}')" title="Archivar">
                         <i class="bi bi-archive"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="eliminarEntrega('${p.id}')" title="Eliminar">
-                        <i class="bi bi-trash"></i>
                     </button>
                 </td>
             </tr>`;
@@ -860,6 +873,7 @@ async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
             <div class="table-responsive">
                 <table class="table table-lans table-hover mb-0">
                     <thead><tr>
+                        <th class="text-center"><input type="checkbox" class="form-check-input" onchange="toggleAllExport(this.checked)"></th>
                         <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th>
                         <th class="text-center">Cant.</th><th>Fecha</th><th class="text-center">Acciones</th>
                     </tr></thead>
@@ -920,7 +934,7 @@ async function archivarEntrega(entregaId) {
 }
 
 async function desarchivarEntrega(entregaId) {
-    if (!confirm('Desarchivar esta entrega? Volvera a aparecer en Entregas y Exportar.')) return;
+    if (!confirm('Desarchivar esta entrega? Volvera a aparecer en Entregas.')) return;
     try {
         await db.collection('lans_pedidos').doc(entregaId).update({ archivado: false });
         showAlert('Entrega desarchivada', 'success');
@@ -930,132 +944,9 @@ async function desarchivarEntrega(entregaId) {
     }
 }
 
-async function eliminarEntrega(entregaId) {
-    if (!confirm('Eliminar esta entrega? Esta accion no se puede deshacer.')) return;
-    try {
-        await db.collection('lans_pedidos').doc(entregaId).delete();
-        showAlert('Entrega eliminada', 'warning');
-        showEntregas();
-    } catch (e) {
-        showAlert('Error: ' + e.message, 'danger');
-    }
-}
-
 // ═══════════════════════════════
-//  VIEW: Exportar Excel
+//  Excel Export + Helpers
 // ═══════════════════════════════
-
-let _exportFechaDesde = '';
-let _exportFechaHasta = '';
-
-async function showExportar(fechaDesde, fechaHasta) {
-    _exportFechaDesde = fechaDesde !== undefined ? fechaDesde : _exportFechaDesde;
-    _exportFechaHasta = fechaHasta !== undefined ? fechaHasta : _exportFechaHasta;
-    setActiveNav('showExportar');
-    const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
-
-    let snap;
-    try {
-        snap = await db.collection('lans_pedidos').get();
-    } catch (e) {
-        main.innerHTML = `<div class="alert alert-danger">Error al cargar: ${e.message}</div>`;
-        return;
-    }
-
-    let exportEntregas = [];
-    snap.forEach(d => exportEntregas.push({ id: d.id, ...d.data() }));
-
-    exportEntregas = exportEntregas.filter(e => !e.archivado);
-
-    if (_exportFechaDesde) {
-        const desde = new Date(_exportFechaDesde + 'T00:00:00');
-        exportEntregas = exportEntregas.filter(e => e.fecha && e.fecha.toDate() >= desde);
-    }
-    if (_exportFechaHasta) {
-        const hasta = new Date(_exportFechaHasta + 'T23:59:59');
-        exportEntregas = exportEntregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
-    }
-
-    exportEntregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
-
-    const filtroFechas = `
-        <div class="card card-lans mb-3">
-            <div class="card-body py-2">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold mb-1">No. Inventario</label>
-                        <input type="text" id="noInventario" class="form-control form-control-sm"
-                               placeholder="Ej: LANS-INV-0001" value="LANS-INV-0001">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Desde</label>
-                        <input type="date" class="form-control form-control-sm" value="${_exportFechaDesde}"
-                               onchange="showExportar(this.value, undefined)">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Hasta</label>
-                        <input type="date" class="form-control form-control-sm" value="${_exportFechaHasta}"
-                               onchange="showExportar(undefined, this.value)">
-                    </div>
-                    <div class="col-md-5">
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-lans btn-sm" onclick="descargarExcel()">
-                                <i class="bi bi-download me-1"></i>Descargar Excel
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()">
-                                <i class="bi bi-check2-all me-1"></i>Todos
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="_exportFechaDesde='';_exportFechaHasta='';showExportar('','')">
-                                <i class="bi bi-x-circle me-1"></i>Limpiar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-
-    if (exportEntregas.length === 0) {
-        main.innerHTML = `
-            <h5 class="mb-3"><i class="bi bi-file-earmark-excel me-2 text-lans"></i>Exportar a Excel</h5>
-            ${filtroFechas}
-            <div class="empty-state"><i class="bi bi-file-earmark-excel"></i><h5>Sin entregas</h5><p>No hay entregas con estos filtros</p></div>`;
-        return;
-    }
-
-    let rows = '';
-    exportEntregas.forEach(p => {
-        const fecha = p.fecha ? p.fecha.toDate().toLocaleDateString('es-MX') : '';
-        const items = (p.detalles || []).map(i => `${i.nombre} (${i.cantidad})`).join(', ');
-        rows += `
-            <tr>
-                <td class="text-center">
-                    <input type="checkbox" class="form-check-input export-check" value="${p.id}"
-                           data-detalles='${JSON.stringify(p.detalles || [])}' data-area="${p.area}">
-                </td>
-                <td><strong>#${p.id.slice(-5).toUpperCase()}</strong></td>
-                <td>${p.nombreEmpleado}</td>
-                <td><span class="badge bg-primary">${p.area}</span></td>
-                <td><small>${items}</small></td>
-                <td>${fecha}</td>
-            </tr>`;
-    });
-
-    main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-file-earmark-excel me-2 text-lans"></i>Exportar a Excel <span class="badge bg-secondary ms-1">${exportEntregas.length}</span></h5>
-        ${filtroFechas}
-        <div class="card card-lans">
-            <div class="table-responsive">
-                <table class="table table-lans table-hover mb-0">
-                    <thead><tr>
-                        <th class="text-center"><input type="checkbox" class="form-check-input" onchange="toggleAllExport(this.checked)"></th>
-                        <th>ID</th><th>Registrado por</th><th>Area</th><th>Productos</th><th>Fecha</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        </div>`;
-}
 
 function toggleAllExport(checked) {
     const state = checked !== undefined ? checked : true;

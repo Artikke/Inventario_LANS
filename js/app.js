@@ -691,41 +691,78 @@ async function showMisEntregas() {
 //  VIEW: Entregas (Admin - todas)
 // ═══════════════════════════════
 
-async function showEntregas(filtroArea) {
-    filtroArea = filtroArea || 'todas';
+let _entregasFiltroArea = 'todas';
+let _entregasFechaDesde = '';
+let _entregasFechaHasta = '';
+
+async function showEntregas(filtroArea, fechaDesde, fechaHasta) {
+    _entregasFiltroArea = filtroArea || _entregasFiltroArea || 'todas';
+    _entregasFechaDesde = fechaDesde !== undefined ? fechaDesde : _entregasFechaDesde;
+    _entregasFechaHasta = fechaHasta !== undefined ? fechaHasta : _entregasFechaHasta;
     setActiveNav('showEntregas');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
 
     let snap;
     try {
-        if (filtroArea === 'todas') {
-            snap = await db.collection('lans_pedidos').get();
-        } else {
-            snap = await db.collection('lans_pedidos').where('area', '==', filtroArea).get();
-        }
+        snap = await db.collection('lans_pedidos').get();
     } catch (e) {
         main.innerHTML = `<div class="alert alert-danger">Error al cargar entregas: ${e.message}</div>`;
         return;
     }
 
-    const entregas = [];
+    let entregas = [];
     snap.forEach(d => entregas.push({ id: d.id, ...d.data() }));
+
+    if (_entregasFiltroArea !== 'todas') {
+        entregas = entregas.filter(e => e.area === _entregasFiltroArea);
+    }
+    if (_entregasFechaDesde) {
+        const desde = new Date(_entregasFechaDesde + 'T00:00:00');
+        entregas = entregas.filter(e => e.fecha && e.fecha.toDate() >= desde);
+    }
+    if (_entregasFechaHasta) {
+        const hasta = new Date(_entregasFechaHasta + 'T23:59:59');
+        entregas = entregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
+    }
+
     entregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
     const areaOpts = ['todas', ...AREAS];
-    const filterBtns = `
-        <select class="form-select form-select-sm" style="width:auto" onchange="showEntregas(this.value)">
-            ${areaOpts.map(a => `<option value="${a}" ${a === filtroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
-        </select>`;
+    const filtros = `
+        <div class="card card-lans mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-building me-1"></i>Area</label>
+                        <select class="form-select form-select-sm" onchange="showEntregas(this.value)">
+                            ${areaOpts.map(a => `<option value="${a}" ${a === _entregasFiltroArea ? 'selected' : ''}>${a === 'todas' ? 'Todas las areas' : a}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Desde</label>
+                        <input type="date" class="form-control form-control-sm" value="${_entregasFechaDesde}"
+                               onchange="showEntregas(undefined, this.value, undefined)">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Hasta</label>
+                        <input type="date" class="form-control form-control-sm" value="${_entregasFechaHasta}"
+                               onchange="showEntregas(undefined, undefined, this.value)">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="_entregasFiltroArea='todas';_entregasFechaDesde='';_entregasFechaHasta='';showEntregas('todas','','')">
+                            <i class="bi bi-x-circle me-1"></i>Limpiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
 
     if (entregas.length === 0) {
         main.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas</h5>
-                <div class="d-flex gap-2 align-items-center">${filterBtns}</div>
-            </div>
-            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin entregas</h5></div>`;
+            <h5 class="mb-3"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas</h5>
+            ${filtros}
+            <div class="empty-state"><i class="bi bi-inbox"></i><h5>Sin entregas</h5><p>No hay entregas con estos filtros</p></div>`;
         return;
     }
 
@@ -756,10 +793,8 @@ async function showEntregas(filtroArea) {
     });
 
     main.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas <span class="badge bg-secondary ms-1">${entregas.length}</span></h5>
-            <div class="d-flex gap-2 align-items-center">${filterBtns}</div>
-        </div>
+        <h5 class="mb-3"><i class="bi bi-clipboard-data me-2 text-lans"></i>Entregas <span class="badge bg-secondary ms-1">${entregas.length}</span></h5>
+        ${filtros}
         <div class="card card-lans">
             <div class="table-responsive">
                 <table class="table table-lans table-hover mb-0">
@@ -827,7 +862,12 @@ async function eliminarEntrega(entregaId) {
 //  VIEW: Exportar Excel
 // ═══════════════════════════════
 
-async function showExportar() {
+let _exportFechaDesde = '';
+let _exportFechaHasta = '';
+
+async function showExportar(fechaDesde, fechaHasta) {
+    _exportFechaDesde = fechaDesde !== undefined ? fechaDesde : _exportFechaDesde;
+    _exportFechaHasta = fechaHasta !== undefined ? fechaHasta : _exportFechaHasta;
     setActiveNav('showExportar');
     const main = document.getElementById('mainContent');
     main.innerHTML = '<div class="spinner-lans"><div class="spinner-border text-primary"></div></div>';
@@ -840,15 +880,61 @@ async function showExportar() {
         return;
     }
 
-    const exportEntregas = [];
+    let exportEntregas = [];
     snap.forEach(d => exportEntregas.push({ id: d.id, ...d.data() }));
+
+    if (_exportFechaDesde) {
+        const desde = new Date(_exportFechaDesde + 'T00:00:00');
+        exportEntregas = exportEntregas.filter(e => e.fecha && e.fecha.toDate() >= desde);
+    }
+    if (_exportFechaHasta) {
+        const hasta = new Date(_exportFechaHasta + 'T23:59:59');
+        exportEntregas = exportEntregas.filter(e => e.fecha && e.fecha.toDate() <= hasta);
+    }
+
     exportEntregas.sort((a, b) => (b.fecha?.toMillis() || 0) - (a.fecha?.toMillis() || 0));
 
+    const filtroFechas = `
+        <div class="card card-lans mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">No. Inventario</label>
+                        <input type="text" id="noInventario" class="form-control form-control-sm"
+                               placeholder="Ej: LANS-INV-0001" value="LANS-INV-0001">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Desde</label>
+                        <input type="date" class="form-control form-control-sm" value="${_exportFechaDesde}"
+                               onchange="showExportar(this.value, undefined)">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar me-1"></i>Hasta</label>
+                        <input type="date" class="form-control form-control-sm" value="${_exportFechaHasta}"
+                               onchange="showExportar(undefined, this.value)">
+                    </div>
+                    <div class="col-md-5">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-lans btn-sm" onclick="descargarExcel()">
+                                <i class="bi bi-download me-1"></i>Descargar Excel
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllExport()">
+                                <i class="bi bi-check2-all me-1"></i>Todos
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="_exportFechaDesde='';_exportFechaHasta='';showExportar('','')">
+                                <i class="bi bi-x-circle me-1"></i>Limpiar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
     if (exportEntregas.length === 0) {
-        main.innerHTML = `<div class="empty-state">
-            <i class="bi bi-file-earmark-excel"></i>
-            <h5>Sin entregas para exportar</h5>
-            <p>No hay entregas registradas</p></div>`;
+        main.innerHTML = `
+            <h5 class="mb-3"><i class="bi bi-file-earmark-excel me-2 text-lans"></i>Exportar a Excel</h5>
+            ${filtroFechas}
+            <div class="empty-state"><i class="bi bi-file-earmark-excel"></i><h5>Sin entregas</h5><p>No hay entregas con estos filtros</p></div>`;
         return;
     }
 
@@ -871,26 +957,8 @@ async function showExportar() {
     });
 
     main.innerHTML = `
-        <h5 class="mb-3"><i class="bi bi-file-earmark-excel me-2 text-lans"></i>Exportar a Excel</h5>
-        <div class="card card-lans mb-3">
-            <div class="card-body">
-                <div class="row align-items-end">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label fw-bold">No. Inventario</label>
-                        <input type="text" id="noInventario" class="form-control"
-                               placeholder="Ej: LANS-INV-0001" value="LANS-INV-0001">
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <button class="btn btn-lans" onclick="descargarExcel()">
-                            <i class="bi bi-download me-2"></i>Descargar Excel
-                        </button>
-                        <button class="btn btn-outline-secondary ms-2" onclick="toggleAllExport()">
-                            <i class="bi bi-check2-all me-1"></i>Seleccionar Todos
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <h5 class="mb-3"><i class="bi bi-file-earmark-excel me-2 text-lans"></i>Exportar a Excel <span class="badge bg-secondary ms-1">${exportEntregas.length}</span></h5>
+        ${filtroFechas}
         <div class="card card-lans">
             <div class="table-responsive">
                 <table class="table table-lans table-hover mb-0">
